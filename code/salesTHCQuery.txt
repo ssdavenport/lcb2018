@@ -1,5 +1,11 @@
---'Usable Marijuana'
+/*
+Generate Total THC for Usable MJ
+Generate Total THC for Extracts
+Generate Total Sales for UsableMJ/Extracts/Edibles
+Generate Total Sales for non-UsableMJ/Extracts/Edibles
+*/
 
+--Generate Total THC for Usable MJ
 SELECT invtype, 
 YEAR(sale_time) as YEAR,
 MONTH(sale_time) as MONTH,
@@ -28,8 +34,8 @@ AND length(inventoryparentid) != 16
 GROUP BY invtype, YEAR,MONTH
 ORDER BY YEAR,MONTH
 
---'extracts'
 
+--Generate Total THC for UsableMJ/Extracts/Edibles
 SELECT invtype, 
 YEAR(sale_time) as YEAR,
 MONTH(sale_time) as MONTH,
@@ -45,7 +51,7 @@ AND r.THC + 0.877 * r.THCA <= 100 #upper limit
 GROUP BY invtype, YEAR,MONTH
 ORDER BY YEAR,MONTH
 
---'other counts and price'
+--Generate Total Sales for non-UsableMJ/Extracts/Edibles
 SELECT invtype, YEAR(sale_time) as YEAR,
 MONTH(sale_time) as MONTH,
 count(*) as counter,
@@ -59,7 +65,7 @@ AND INVTYPE != 'Marijuana Extract for Inhalation'
 GROUP BY invtype, YEAR, MONTH
 ORDER By invtype, YEAR, MONTH
 
---'non other counts and price for all periods
+--Generate Total Sales for UsableMJ/Extracts/Edibles
 SELECT invtype, 
 YEAR(sale_time) as YEAR,
 MONTH(sale_time) as MONTH,
