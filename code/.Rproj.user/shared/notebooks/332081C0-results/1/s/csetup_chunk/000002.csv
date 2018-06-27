@@ -1,0 +1,55 @@
+"0","library(RColorBrewer)"
+"0","source(""../code/wafunctions.R"")"
+"2","data.table 1.10.4.3
+"
+"2","  The fastest way to learn (by data.table authors): https://www.datacamp.com/courses/data-analysis-the-data-table-way
+"
+"2","  Documentation: ?data.table, example(data.table) and browseVignettes(""data.table"")
+"
+"2","  Release notes, videos and slides: http://r-datatable.com
+"
+"2","
+Attaching package: ‘data.table’
+
+"
+"2","The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    transpose
+
+"
+"2","reldist: Relative Distribution Methods
+Version 1.6-6 created on 2016-10-07.
+copyright (c) 2003, Mark S. Handcock, University of California-Los Angeles
+ For citation information, type citation(""reldist"").
+ Type help(package=""reldist"") to get started.
+
+"
+"0","set.seed(123)"
+"0","knitr::opts_chunk$set(echo = FALSE, warning = F, message = F)"
+"0","sales_tabulation <- fread(""../output/sales_tabulation_flagsremoved.csv"") # cleaned data"
+"0","productsummary <- fread(""../output/product summary flags rmd2.csv"") %>% "
+"0","         as.data.table()"
+"1","Read 4.3% of 1631379 rows"
+"1","Read 23.3% of 1631379 rows"
+"1","Read 50.3% of 1631379 rows"
+"1","Read 72.3% of 1631379 rows"
+"1","Read 85.2% of 1631379 rows"
+"1","Read 1631379 rows and 30 (of 30) columns from 0.394 GB file in 00:00:07
+"
+"0","# productsummary <- fread(""../output/product summary flags rmd sample.csv"") %>% "
+"0","         # as.data.table()"
+"0","x <- productsummary %>% filter(invtype=='Marijuana Extract for Inhalation')"
+"0","xs <- x %>% filter(TotalTHC < 100) %>% dplyr::sample_n(2e3)"
+"0","sample_size <- 2e3"
+"0","# CLEANING"
+"0","pctiles <- c(0, .001, .25, .5, .75, .99, .999, 1)"
+"0","cnnbd_pctiles <- with(productsummary, tapply((TotalTHC+TotalCBD), invtype, function(x) {"
+"0","  quantile(x, pctiles, na.rm=T)})) %>% bind_rows %>% t %>% "
+"0","  `colnames<-`(paste0(""p"", pctiles))"
+"0","  "
+"0","cnnbd_pctiles %>% as.data.frame() %>% kable(caption='Percentiles of total Cannabinoids (dirty)')"

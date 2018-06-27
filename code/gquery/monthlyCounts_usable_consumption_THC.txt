@@ -1,0 +1,215 @@
+--'Usable Marijuana'
+
+SELECT invtype, 
+YEAR(sale_time) AS YEAR, --year indicator
+MONTH(sale_time) AS MONTH, --month indicator
+count(*) as counter,  --dispensing row indicator
+sum(price) as Price,
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND ISSDP_Dummy=1
+AND r.invtype in('Usable Marijuana')
+AND r.price IS NOT NULL
+AND r.price >= 0
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND r.usableweight >= 0.5 #Likley to be data error if below
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+AND r.CBD + 0.877 * r.CBDA IS NOT NULL # not null
+AND r.CBD + 0.877 * r.CBDA >= 0 #possible limits
+AND r.CBD + 0.877 * r.CBDA <= 100 #upper limit
+GROUP BY invtype, YEAR, MONTH
+
+
+-----
+SELECT inventorytype,
+sum(integer(usableweight)) as UsableWeight, --usable weight indicator
+sum(THC) as totalTHCGrams,  --grabss the grams 
+count(*)
+FROM [full_WA_data__proper.mgt_all_fifth_cbd_thc]
+WHERE 1=1
+AND integer(sale_time) >= INTEGER(TIMESTAMP('2016-06-30'))
+and integer(sale_time) <= INTEGER(TIMESTAMP('2017-07-01'))
+AND integer(inventorytype) = 28
+AND integer(UsableWeight) IS NOT NULL #not null
+AND integer(UsableWeight) <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND THC IS NOT NULL # not null
+AND THC >= 0 #possible limits
+AND THC <= 100 #upper limit
+GROUP BY inventorytype
+
+-- marijuana extract for inhalation
+SELECT invtype, 
+YEAR(sale_time) AS YEAR,  --year indicator
+MONTH(sale_time) AS MONTH, --month indicator
+count(*) as counter,  --dispensing rows indicator
+sum(price) as Price,
+sum(usableweight) as UsableWeight, -- usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams --grabs the grams
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation')
+AND r.price IS NOT NULL
+AND r.price >= 0
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 7.0 #No Purchases with weight over 7.0 grams - illegal
+AND r.usableweight >= 0.1 #Likley to be data error if below
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype, YEAR, MONTH
+
+--usable weights builder 
+SELECT round(usableweight,4) as UW, count(*) as items --gets counts rounded to 4 decimals 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation') -- NO other constraints
+GROUP BY(UW) - groups by weight
+
+--types of products
+SELECT INVTYPE, COUNT(*)
+FROM [full_WA_data__proper.Retail_ALL]
+GROUP BY(INVTYPE)
+
+
+---- price only
+
+--'Usable Marijuana'
+
+SELECT invtype, 
+YEAR(sale_time) AS YEAR, --year indicator
+MONTH(sale_time) AS MONTH, --month indicator
+count(*) as counter,  --dispensing row indicator
+sum(price) as Price,
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND r.price IS NOT NULL
+AND r.price >= 0
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND r.usableweight >= 0.5 #Likley to be data error if below
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype, YEAR, MONTH
+
+-- marijuana extract for inhalation
+SELECT sum(price) as Price, count(*) as counter ,r.invtype as invtype
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation')
+AND (r.invtype contains 'Usable Marijuana' OR
+    r.invtype contains 'Marijuana Extract for Inhalation' OR
+    r.invtype contains 'Solid Marijuana Infused Edible' OR
+    r.invtype contains 'Liquid Marijuana Infused Edible')
+AND r.price IS NOT NULL
+AND r.price >= 0
+AND r.ISSDP_Dummy = 1
+GROUP BY invtype
+
+SELECT sum(price) as Price
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND r.price IS NOT NULL
+AND r.price >= 0
+AND r.ISSDP_Dummy = 1
+
+
+------
+SELECT FIRST(m.inventoryid) as inventoryid, FIRST(m.inventorytype) as inventorytype,
+FIRST(m.usableweight) as usableweight, FIRST(m.price) as price, FIRST(m.sale_time) as sale_time,
+FIRST(c.CBD_Total_CBD) as CBD
+FROM [full_WA_data__proper.mgt_all_fifth] m
+JOIN [full_WA_data__proper.mgt_CBD_inventory] c on(m.inventoryid = c.i_id)
+GROUP BY inventoryid, inventorytype, usableweight, price, sale_time
+
+----
+SELECT FIRST(m.inventoryid) as inventoryid, FIRST(m.inventorytype) as inventorytype,
+FIRST(m.usableweight) as usableweight, FIRST(m.price) as price, FIRST(m.sale_time) as sale_time, FIRST(THC_Total_THC) as THC
+FROM [full_WA_data__proper.mgt_all_fifth] m
+JOIN [full_WA_data__proper.mgt_thc_inventory] t on (m.inventoryid = t.i_id)
+WHERE INTEGER(m.sale_time) >= 1467345600 --july 1, 2016
+AND INTEGER(m.sale_time) <= 1498881599 --june 30, 2017
+GROUP BY m.inventoryid, m.inventorytype, m.usableweight, m.price, m.sale_time, t.THC_Total_THC
+
+
+--creating mgt_all_fifthcbd_th
+SELECT t.inventoryid as inventoryid, 
+(t.inventorytype) as inventorytype, 
+(t.usableweight) as usableweight, 
+(t.price) as price, 
+(t.sale_time) as sale_time,
+(t.THC) as THC, 
+FIRST(c.CBD) as CBD,
+count(*) as counter
+FROM [full_WA_data__proper.mgt_all_fifth_THC] t
+LEFT JOIN [full_WA_data__proper.mgt_all_fifth_cbd] c on (t.inventoryid = c.inventoryid)
+GROUP BY inventoryid, inventorytype, sale_time, usableweight, price, THC
+
+
+
+
+-----
+SELECT inventorytype, 
+count(*) as counter,
+sum(integer(usableweight)) as UsableWeight, --usable weight indicator
+sum(thc*integer(usableweight)) as thcGrams  --grabss the grams 
+FROM [full_WA_data__proper.mgt_all_fifth_cbd_thc]
+WHERE 1=1
+AND (integer(inventorytype) =28)
+AND integer(usableweight) IS NOT NULL #not null
+AND integer(usableweight) <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND integer(usableweight) >= 0.5 #Likley to be data error if below
+AND thc IS NOT NULL # not null
+AND thc >= 0 #possible limits
+AND thc <= 100 #upper limit
+--AND cbd IS NOT NULL # not null
+--AND cbd >= 0 #possible limits
+--AND cbd <= 100 #upper limit
+GROUP BY (inventorytype) 
+
+
+----
+SELECT invtype, 
+count(*) as counter,  --dispensing row indicator
+sum(price) as Price,
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.sale_time >= TIMESTAMP("2016-07-01 00:00:00")
+AND r.sale_time <= TIMESTAMP("2017-06-30 23:59:59")
+AND r.invtype in('Usable Marijuana')
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND r.usableweight >= 0.5 #Likley to be data error if below
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype
+
+
+
+-----
+SELECT
+count(*) as counter,
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.ISSDP_Dummy = 1
+AND (r.invtype not in('Marijuana Extract for Inhalation') and r.invtype not in('Usable Marijuana')
+and r.invtype not in('Solid Marijuana Infused Edible') and r.invtype not in('Liquid Marijuana Infused Edible'))
+AND usableweight <454 -- max for any type of purchase 
+AND r.usableweight IS NOT NULL #not null
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit

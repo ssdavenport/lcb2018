@@ -1,0 +1,527 @@
+DROP TABLES;
+
+CREATE user team4 identified by account unlock 
+;
+
+CREATE TABLE team4.accountingemp (
+    emp_id              NUMBER(7) NOT NULL,
+    certificationtype   VARCHAR2(5 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.accountingemp_pk ON
+    team4.accountingemp ( emp_id ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.accountingemp
+    ADD CONSTRAINT accountingemp_pk PRIMARY KEY ( emp_id )
+        USING INDEX team4.accountingemp_pk;
+
+CREATE TABLE team4.bill (
+    bill#                         NUMBER(7) NOT NULL,
+    employee_emp_id               NUMBER(7) NOT NULL,
+    customer_customer#            NUMBER NOT NULL,
+    contract_contract#            NUMBER(7) NOT NULL,
+    deposit_waived                NUMBER,
+    total_bill                    NUMBER,
+    monthly_fee                   NUMBER,
+    send_bill_date                DATE,
+    bill_paid_date                DATE,
+    late_bill_return_date         DATE,
+    late_indicator_boolen         VARCHAR2(1 BYTE),
+    late_fee                      NUMBER,
+    number_of_customers_refered   NUMBER(4),
+    referral_deduction            NUMBER,
+    bill_proration                NUMBER
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.bill_pk ON
+    team4.bill ( bill# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.bill
+    ADD CONSTRAINT bill_pk PRIMARY KEY ( bill# )
+        USING INDEX team4.bill_pk;
+
+CREATE TABLE team4.contract (
+    contract#            NUMBER(7) NOT NULL,
+    employee_emp_id      NUMBER(7) NOT NULL,
+    customer_customer#   NUMBER(7) NOT NULL,
+    contract_date        DATE,
+    start_date           DATE,
+    referrer             NUMBER(7),
+    is_active            VARCHAR2(1 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.contract_pk ON
+    team4.contract ( contract# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.contract
+    ADD CONSTRAINT contract_pk PRIMARY KEY ( contract# )
+        USING INDEX team4.contract_pk;
+
+CREATE TABLE team4.customer (
+    customer#          NUMBER(7) NOT NULL,
+    phone              VARCHAR2(15 BYTE),
+    service_location   NUMBER(7),
+    billing_location   NUMBER(7),
+    client_type        VARCHAR2(20 BYTE),
+    company_name       VARCHAR2(20 BYTE),
+    contact_fname      VARCHAR2(25 BYTE),
+    contact_lname      VARCHAR2(25 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.customer_pk ON
+    team4.customer ( customer# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.customer
+    ADD CONSTRAINT customer_pk PRIMARY KEY ( customer# )
+        USING INDEX team4.customer_pk;
+
+CREATE TABLE team4.deliveryemp (
+    emp_id          NUMBER(7) NOT NULL,
+    driverlicense   VARCHAR2(16 CHAR)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.deliveryemp_pk ON
+    team4.deliveryemp ( emp_id ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.deliveryemp
+    ADD CONSTRAINT deliveryemp_pk PRIMARY KEY ( emp_id )
+        USING INDEX team4.deliveryemp_pk;
+
+CREATE TABLE team4.deliveryservice (
+    service#             NUMBER(7) NOT NULL,
+    employee_emp_id      NUMBER(7) NOT NULL,
+    vehicle_vehicle#     NUMBER(7) NOT NULL,
+    route_route#         NUMBER(7) NOT NULL,
+    location_location#   NUMBER(7) NOT NULL,
+    delivery_date        DATE NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.deliveryservice_pk ON
+    team4.deliveryservice ( service# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.deliveryservice
+    ADD CONSTRAINT deliveryservice_pk PRIMARY KEY ( service# )
+        USING INDEX team4.deliveryservice_pk;
+
+CREATE TABLE team4.employee (
+    emp_id             NUMBER(7) NOT NULL,
+    employee_emp_id    NUMBER(7),
+    lastname           VARCHAR2(25 BYTE),
+    firstname          VARCHAR2(25 BYTE),
+    address            VARCHAR2(40 BYTE),
+    state              VARCHAR2(2 BYTE),
+    zip                VARCHAR2(10 BYTE),
+    telephone          VARCHAR2(10 BYTE),
+    gender             VARCHAR2(1 CHAR),
+    race               VARCHAR2(25 CHAR),
+    dateofbirth        DATE,
+    title              VARCHAR2(25 CHAR),
+    hiredate           DATE,
+    leavedate          DATE,
+    salary             NUMBER(10),
+    marketingmanager   VARCHAR2(1 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+ALTER TABLE team4.employee ADD CHECK ( telephone BETWEEN '0' AND '9' );
+
+COMMENT ON COLUMN team4.employee.employee_emp_id IS
+    'Supervisor''s ID';
+
+CREATE UNIQUE INDEX team4.employee_pk ON
+    team4.employee ( emp_id ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.employee
+    ADD CONSTRAINT employee_pk PRIMARY KEY ( emp_id )
+        USING INDEX team4.employee_pk;
+
+CREATE TABLE team4.evaluationreport (
+    report#                NUMBER(7) NOT NULL,
+    deliveryemp_emp_id     NUMBER(7) NOT NULL,
+    employee_emp_id        NUMBER(7) NOT NULL,
+    evaluationdate         DATE NOT NULL,
+    score                  NUMBER(7) NOT NULL,
+    num_delivery           NUMBER(4) NOT NULL,
+    num_additional_sales   NUMBER(4) NOT NULL,
+    num_leads              NUMBER(4) NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+COMMENT ON COLUMN team4.evaluationreport.score IS
+    'derived attribute';
+
+CREATE UNIQUE INDEX team4.evaluationreport_pk ON
+    team4.evaluationreport ( report# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.evaluationreport
+    ADD CONSTRAINT evaluationreport_pk PRIMARY KEY ( report# )
+        USING INDEX team4.evaluationreport_pk;
+
+CREATE TABLE team4.lead (
+    lead#                NUMBER(7) NOT NULL,
+    customer_customer#   NUMBER(7) NOT NULL,
+    employee_emp_id      NUMBER(7) NOT NULL,
+    lead_date            DATE,
+    client_type          VARCHAR2(20 BYTE),
+    comments             VARCHAR2(100 BYTE),
+    contact_fname        VARCHAR2(25 BYTE),
+    contact_lname        VARCHAR2(25 BYTE),
+    phone                VARCHAR2(15 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.lead_pk ON
+    team4.lead ( lead# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.lead
+    ADD CONSTRAINT lead_pk PRIMARY KEY ( lead# )
+        USING INDEX team4.lead_pk;
+
+CREATE TABLE team4.location (
+    location#      NUMBER(7) NOT NULL,
+    address_line   VARCHAR2(40 BYTE),
+    city           VARCHAR2(25 BYTE),
+    state          VARCHAR2(2 BYTE),
+    zip            VARCHAR2(10 BYTE)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.location_pk ON
+    team4.location ( location# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.location
+    ADD CONSTRAINT location_pk PRIMARY KEY ( location# )
+        USING INDEX team4.location_pk;
+
+CREATE TABLE team4.orderitem (
+    item#           NUMBER(7) NOT NULL,
+    orders_order#   NUMBER(7) NOT NULL,
+    item_type       NUMBER(3) NOT NULL,
+    item_quantity   NUMBER(7),
+    item_discount   NUMBER
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.orderitem_pk ON
+    team4.orderitem (
+        item#
+    ASC,
+        orders_order#
+    ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.orderitem
+    ADD CONSTRAINT orderitem_pk PRIMARY KEY ( item#,
+    orders_order# )
+        USING INDEX team4.orderitem_pk;
+
+CREATE TABLE team4.orders (
+    order#               NUMBER(7) NOT NULL,
+    employee_emp_id      NUMBER(7) NOT NULL,
+    customer_customer#   NUMBER(7) NOT NULL,
+    bill_bill#           NUMBER(7) NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.orders_pk ON
+    team4.orders ( order# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.orders
+    ADD CONSTRAINT orders_pk PRIMARY KEY ( order# )
+        USING INDEX team4.orders_pk;
+
+CREATE TABLE team4.rental (
+    rental#              NUMBER(7) NOT NULL,
+    employee_emp_id      NUMBER(7) NOT NULL,
+    customer_customer#   NUMBER(7) NOT NULL,
+    bill_bill#           NUMBER(7) NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.rental_pk ON
+    team4.rental ( rental# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.rental
+    ADD CONSTRAINT rental_pk PRIMARY KEY ( rental# )
+        USING INDEX team4.rental_pk;
+
+CREATE TABLE team4.rentalitem (
+    item#            NUMBER(7) NOT NULL,
+    rental_rental#   NUMBER(7) NOT NULL,
+    item_type        NUMBER(3) NOT NULL,
+    item_quantity    NUMBER(7),
+    item_discount    NUMBER,
+    in_use           CHAR(1),
+    reusable         CHAR(1)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.rentalitem_pk ON
+    team4.rentalitem (
+        item#
+    ASC,
+        rental_rental#
+    ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.rentalitem
+    ADD CONSTRAINT rentalitem_pk PRIMARY KEY ( item# )
+        USING INDEX team4.rentalitem_pk;
+
+CREATE TABLE team4.route (
+    route#            NUMBER(7) NOT NULL,
+    location#         NUMBER(7) NOT NULL,
+    evaluation        CHAR(1 BYTE) NOT NULL,
+    evaluation_date   DATE NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+COMMENT ON COLUMN team4.route.evaluation IS
+    'evaluate route as grade A/B/C/D';
+
+COMMENT ON COLUMN team4.route.evaluation_date IS
+    'last evaluation date';
+
+CREATE UNIQUE INDEX team4.route_pk ON
+    team4.route ( route# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.route
+    ADD CONSTRAINT route_pk PRIMARY KEY ( route# )
+        USING INDEX team4.route_pk;
+
+CREATE TABLE team4.salesemp (
+    emp_id      NUMBER(7) NOT NULL,
+    salesarea   VARCHAR2(25 CHAR)
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+CREATE UNIQUE INDEX team4.salesemp_pk ON
+    team4.salesemp ( emp_id ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.salesemp
+    ADD CONSTRAINT salesemp_pk PRIMARY KEY ( emp_id )
+        USING INDEX team4.salesemp_pk;
+
+CREATE TABLE team4.vehicle (
+    plate#   NUMBER(7) NOT NULL,
+    type     VARCHAR2(10 BYTE) NOT NULL
+)
+PCTFREE 10 PCTUSED 40 TABLESPACE users LOGGING
+    STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT );
+
+COMMENT ON COLUMN team4.vehicle.type IS
+    'type, i.e. car or truck, etc.';
+
+CREATE UNIQUE INDEX team4.vehicle_pk ON
+    team4.vehicle ( plate# ASC )
+        TABLESPACE users PCTFREE 10
+            STORAGE ( PCTINCREASE 0 MINEXTENTS 1 MAXEXTENTS UNLIMITED FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT )
+        LOGGING;
+
+ALTER TABLE team4.vehicle
+    ADD CONSTRAINT vehicle_pk PRIMARY KEY ( plate# )
+        USING INDEX team4.vehicle_pk;
+
+ALTER TABLE team4.accountingemp
+    ADD CONSTRAINT accountingemp_employee_fk FOREIGN KEY ( emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.bill
+    ADD CONSTRAINT bill_contract_fk FOREIGN KEY ( contract_contract# )
+        REFERENCES team4.contract ( contract# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.bill
+    ADD CONSTRAINT bill_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.contract
+    ADD CONSTRAINT contract_customer_fk FOREIGN KEY ( customer_customer# )
+        REFERENCES team4.customer ( customer# )
+            ON DELETE CASCADE
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.contract
+    ADD CONSTRAINT contract_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.customer
+    ADD CONSTRAINT customer_location_fk FOREIGN KEY ( billing_location )
+        REFERENCES team4.location ( location# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.customer
+    ADD CONSTRAINT customer_location_fkv2 FOREIGN KEY ( service_location )
+        REFERENCES team4.location ( location# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.deliveryemp
+    ADD CONSTRAINT deliveryemp_employee_fk FOREIGN KEY ( emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.deliveryservice
+    ADD CONSTRAINT deliveryservice_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.deliveryservice
+    ADD CONSTRAINT deliveryservice_location_fk FOREIGN KEY ( location_location# )
+        REFERENCES team4.location ( location# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.deliveryservice
+    ADD CONSTRAINT deliveryservice_route_fk FOREIGN KEY ( route_route# )
+        REFERENCES team4.route ( route# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.deliveryservice
+    ADD CONSTRAINT deliveryservice_vehicle_fk FOREIGN KEY ( vehicle_vehicle# )
+        REFERENCES team4.vehicle ( plate# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.employee
+    ADD CONSTRAINT employee_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.evaluationreport
+    ADD CONSTRAINT evaluationreport_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.evaluationreport
+    ADD CONSTRAINT evaluationreport_employee_fkv2 FOREIGN KEY ( deliveryemp_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.lead
+    ADD CONSTRAINT lead_customer_fk FOREIGN KEY ( customer_customer# )
+        REFERENCES team4.customer ( customer# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.lead
+    ADD CONSTRAINT lead_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.orderitem
+    ADD CONSTRAINT orderitem_orders_fk FOREIGN KEY ( orders_order# )
+        REFERENCES team4.orders ( order# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.orders
+    ADD CONSTRAINT orders_bill_fk FOREIGN KEY ( bill_bill# )
+        REFERENCES team4.bill ( bill# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.orders
+    ADD CONSTRAINT orders_customer_fk FOREIGN KEY ( customer_customer# )
+        REFERENCES team4.customer ( customer# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.orders
+    ADD CONSTRAINT orders_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.contract
+    ADD CONSTRAINT referred_by FOREIGN KEY ( referrer )
+        REFERENCES team4.customer ( customer# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.rental
+    ADD CONSTRAINT rental_bill_fk FOREIGN KEY ( bill_bill# )
+        REFERENCES team4.bill ( bill# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.rental
+    ADD CONSTRAINT rental_customer_fk FOREIGN KEY ( customer_customer# )
+        REFERENCES team4.customer ( customer# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.rental
+    ADD CONSTRAINT rental_employee_fk FOREIGN KEY ( employee_emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.rentalitem
+    ADD CONSTRAINT rentalitem_rental_fk FOREIGN KEY ( rental_rental# )
+        REFERENCES team4.rental ( rental# )
+    NOT DEFERRABLE;
+
+ALTER TABLE team4.salesemp
+    ADD CONSTRAINT salesemp_employee_fk FOREIGN KEY ( emp_id )
+        REFERENCES team4.employee ( emp_id )
+    NOT DEFERRABLE;

@@ -1,0 +1,106 @@
+-- Usable Marijuana - THC
+
+SELECT invtype, 
+count(*) as counter,  --dispensing row indicator
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype
+
+-- Usable Marijuana Share of Multiple Parents
+SELECT invtype, 
+count(*) as count_of_mult_parent
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND length(inventoryparentid) != 16
+GROUP BY invtype
+
+-- Usable Marijuana - Price
+
+SELECT invtype, 
+count(*) as counter,  --dispensing row indicator
+sum(r.price_x) as price
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.price_x IS NOT NULL
+GROUP BY invtype
+
+-- Marijuana Extract for Inhalation - THC
+
+SELECT invtype, 
+count(*) as counter,  --dispensing row indicator
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 7.0 #No Purchases with weight over 7.0 grams - illegal
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype
+
+-- Marijuana Extract for Inhalation  - Price
+
+SELECT invtype, 
+count(*) as counter,  --dispensing row indicator
+sum(r.price_x) as price
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.price_x IS NOT NULL
+GROUP BY invtype
+
+--Other Total Count
+SELECT count(*) as counter,  --dispensing row indicator
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype not in ('Marijuana Extract for Inhalation')
+AND r.invtype not in ('Usable Marijuana')
+AND r.invtype not in ('Liquid Marijuana Infused Edible')
+AND r.invtype not in ('Solid Marijuana Infused Edible')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+
+--Other Price
+SELECT count(*) as counter,  --dispensing row indicator
+sum(r.price_x) as price
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype not in ('Marijuana Extract for Inhalation')
+AND r.invtype not in ('Usable Marijuana')
+AND r.invtype not in ('Liquid Marijuana Infused Edible')
+AND r.invtype not in ('Solid Marijuana Infused Edible')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.price_x IS NOT NULL
+
+--Other UW and THC
+SELECT count(*) as counter,  --dispensing row indicator
+sum(usableweight) as UsableWeight, --usable weight indicator
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype not in ('Marijuana Extract for Inhalation')
+AND r.invtype not in ('Usable Marijuana')
+AND r.invtype not in ('Liquid Marijuana Infused Edible')
+AND r.invtype not in ('Solid Marijuana Infused Edible')
+AND ((year(sale_time) = 2016 and month(sale_time) >= 7) OR (year(sale_time) = 2017 and month(sale_time) <= 6))
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 454 #No Purchases with weight over 454 grams - illegal, solid threshold
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit

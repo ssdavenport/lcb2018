@@ -1,0 +1,108 @@
+#querey joins dispensory, sample, and sample potency
+#for THC analysis
+
+#2-9-2018 : join via inventory, 1%, usable marjuanna only
+SELECT d.ID,d.SESSIONTIME,d.TRANSACTIONID, d.PRICE,d.USABLEWEIGHT,d.INVENTORYTYPE,p.name,p.value,p.LAB_PROVIDED
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID) # dispensing-> inventory
+JOIN (SELECT ID, INTEGER(SUBSTR(SAMPLE_ID,10,6)) as F_SAMPLE_ID FROM [full_WA_data__proper.biotrackthc_inventory]) ii ON(i.ID = ii.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (ii.F_SAMPLE_ID= s.ID) # inventory -> sample
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE p.name = "THC"
+AND d.INVENTORYTYPE = 28 #only useable marjunana 
+AND RAND() < 0.01 #select only 1 percent of rows ~120k of 12 million
+
+#2-10-2018 : join via inventory, 1%, usable marjuanna only = using the better THC Total metrics, better data cleaning 
+SELECT d.ID,d.SESSIONTIME,d.TRANSACTIONID, d.PRICE,d.USABLEWEIGHT,d.INVENTORYTYPE,p.name,p.value,p.LAB_PROVIDED
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID) # dispensing-> inventory
+JOIN (SELECT ID, INTEGER(SUBSTR(SAMPLE_ID,10,6)) as F_SAMPLE_ID FROM [full_WA_data__proper.biotrackthc_inventory]) ii ON(i.ID = ii.ID) #midstep to take care of type issues
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (ii.F_SAMPLE_ID= s.ID) # inventory -> sample
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE p.name = 'Total' # take only total (thc+thca), need to add in CBD for future analysis - figure out how to get both
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND d.SESSIONTIME >= 1412121600 # 10/01/2014 @12:00 AM in unix time, gives the market a few months to equilibrate following opening
+AND d.INVENTORYTYPE = 28 #only useable marjunana 
+AND RAND() < 0.01 #select only 1 percent of rows ~120k of 12 million
+
+#2-13-2018 : join via inventory, 1%, marjuana extract for inhalation= using the better THC Total metrics, better data cleaning 
+SELECT d.ID,d.SESSIONTIME,d.TRANSACTIONID, d.PRICE,d.USABLEWEIGHT,d.INVENTORYTYPE,p.name,p.value,p.LAB_PROVIDED
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID) # dispensing-> inventory
+JOIN (SELECT ID, INTEGER(SUBSTR(SAMPLE_ID,10,6)) as F_SAMPLE_ID FROM [full_WA_data__proper.biotrackthc_inventory]) ii ON(i.ID = ii.ID) #midstep to take care of type issues
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (ii.F_SAMPLE_ID= s.ID) # inventory -> sample
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE p.name = 'Total' # take only total (thc+thca), need to add in CBD for future analysis - figure out how to get both
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND d.SESSIONTIME >= 1412121600 # 10/01/2014 @12:00 AM in unix time, gives the market a few months to equilibrate following opening
+AND d.INVENTORYTYPE IN (24,28) #extract for inhalation and useable marjuana
+AND RAND() < 0.01 #select only 1 percent of rows ~120k of 12 million
+
+
+############################## Errror in all above, incorrect joins and random data as result ####################################################
+#2-17-2018 
+
+SELECT d.ID,d.SESSIONTIME,d.TRANSACTIONID, d.PRICE,d.USABLEWEIGHT,d.INVENTORYTYPE,p.name,p.value
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (d.inventoryid= s.parent_id) # inventory -> sample
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE p.name = 'Total' # take only total (thc+thca), need to add in CBD for future analysis - figure out how to get both
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND d.SESSIONTIME >= 1412121600 # 10/01/2014 @12:00 AM in unix time, gives the market a few months to equilibrate following opening
+AND d.INVENTORYTYPE IN (24,28) #extract for inhalation and useable marjuana
+AND RAND() < 0.01 #select only 1 percent of rows ~120k of 12 million
+
+2/18
+
+SELECT count(*)
+FROM [full_WA_data__proper.biotrackthc_dispensing2]
+JOIN [full_WA_data__proper.biotrackthc_dispensing2]
+JOIN [full_WA_data__proper.biotrackthc_dispensing2]
+
+-Join dispensing with inventory; dispensing.inventoryid = inventory.id
+ 		-Join inventory with sample; inventory.sample_id = sample.inventoryid
+		-Join sample with sample potency; labresults_samples.id = labresults_potency_analysis.sample_id
+
+#2/19
+
+SELECT d.ID,d.SESSIONTIME,d.TRANSACTIONID, d.PRICE,d.USABLEWEIGHT,d.INVENTORYTYPE,p.name,p.value
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND p.name = 'Total' #
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND d.SESSIONTIME >= 1412121600 # 10/01/2014 @12:00 AM in unix time, gives the market a few months to equilibrate following opening
+#AND d.INVENTORYTYPE IN (24,28) #extract for inhalation and useable marjuana
+AND RAND() < 0.01 #select only 1 percent of rows ~120k of 12 million;
+
+#TOTAL THC 24 and 28 query #############################################
+SELECT d.SESSIONTIME, d.INVENTORYTYPE, d.usableweight, p.value
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data errord.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (28
+
+

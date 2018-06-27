@@ -1,0 +1,154 @@
+--************************
+--merge into retail all
+SELECT Retail.*, THC.ALL_PER_THC_POTENCY
+FROM [full_WA_data__proper.Retail_ALL] as Retail
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_all_per_thc_potency] as THC on (THC.ID = Retail.inventoryid)
+
+
+--************************
+--find true potency for each item, based on the aggreagation of the other numbers
+SELECT THC.ID as ID,
+PER.parent1*THC.parent1 +
+PER.parent2*THC.parent2 +
+PER.parent3*THC.parent3 +
+PER.parent4*THC.parent4 +
+PER.parent5*THC.parent5 +
+PER.parent6*THC.parent6 +
+PER.parent7*THC.parent7 +
+PER.parent8*THC.parent8 +
+PER.parent9*THC.parent9 +
+PER.parent10*THC.parent10 +
+PER.parent11*THC.parent11 +
+PER.parent12*THC.parent12 +
+PER.parent13*THC.parent13 +
+PER.parent14*THC.parent14 +
+PER.parent15*THC.parent15 as ALL_PER_THC_POTENCY
+FROM [full_WA_data__proper.mgt_inventory_inventoryparentid_split_percentage] as PER
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] as THC on (THC.ID = PER.id)
+
+
+
+
+--************************
+--find the total THC potency, multipl the potency by the share of potency
+SELECT per.id,
+(THC.s1_trueTHCTOTAL/100)*per.parent1 +
+(THC.s2_trueTHCTOTAL/100)*per.parent2 +
+(THC.s3_trueTHCTOTAL/100)*per.parent3 +
+(THC.s4_trueTHCTOTAL/100)*per.parent4 +
+(THC.s5_trueTHCTOTAL/100)*per.parent5 +
+(THC.s6_trueTHCTOTAL/100)*per.parent6 +
+(THC.s7_trueTHCTOTAL/100)*per.parent7 +
+(THC.s8_trueTHCTOTAL/100)*per.parent8 +
+(THC.s9_trueTHCTOTAL/100)*per.parent9 +
+(THC.s10_trueTHCTOTAL/100)*per.parent10 +
+(THC.s11_trueTHCTOTAL/100)*per.parent11 +
+(THC.s12_trueTHCTOTAL/100)*per.parent12 +
+(THC.s13_trueTHCTOTAL/100)*per.parent13 +
+(THC.s14_trueTHCTOTAL/100)*per.parent14 +
+(THC.s15_trueTHCTOTAL/100)*per.parent15 
+FROM [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] as THC
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_percentage] as per ON(per.id = THC.i_InventoryID)
+LIMIT 5
+
+--************************
+--generate matching THC elements
+SELECT i.InventoryID as ID,
+NVL(s1.trueTHCTOTAL,0) as parent1,
+NVL(s2.trueTHCTOTAL,0) as parent2,
+NVL(s3.trueTHCTOTAL,0) as parent3,
+NVL(s4.trueTHCTOTAL,0) as parent4,
+NVL(s5.trueTHCTOTAL,0) as parent5,
+NVL(s6.trueTHCTOTAL,0) as parent6,
+NVL(s7.trueTHCTOTAL,0) as parent7,
+NVL(s8.trueTHCTOTAL,0) as parent8,
+NVL(s9.trueTHCTOTAL,0) as parent9,
+NVL(s10.trueTHCTOTAL,0) as parent10,
+NVL(s11.trueTHCTOTAL,0) as parent11,
+NVL(s12.trueTHCTOTAL,0) as parent12,
+NVL(s13.trueTHCTOTAL,0) as parent13,
+NVL(s14.trueTHCTOTAL,0) as parent14,
+NVL(s15.trueTHCTOTAL,0) as parent15
+FROM [full_WA_data__proper.mgt_inventory_inventoryparentid_split_noTHC] i
+LEFT JOIN [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s1 ON (i.parent1 = s1.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s2 ON (i.parent2 = s2.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s3 ON (i.parent3 = s3.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s4 ON (i.parent4 = s4.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s5 ON (i.parent5 = s5.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s6 ON (i.parent6 = s6.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s7 ON (i.parent7 = s7.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s8 ON (i.parent8 = s8.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s9 ON (i.parent9 = s9.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s10 ON (i.parent10 = s10.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s11 ON (i.parent11 = s11.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s12 ON (i.parent12 = s12.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s13 ON (i.parent13 = s13.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s14 ON (i.parent14 = s14.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s15 ON (i.parent15 = s15.Sample_InventoryParentID)
+
+--************************
+--generate all parentIDS
+SELECT id as InventoryID, FIRST(SPLIT(INVENTORYPARENTID, ',')) AS parent1,
+NTH(2, SPLIT(INVENTORYPARENTID, ',')) AS parent2,
+NTH(3, SPLIT(INVENTORYPARENTID, ',')) AS parent3,
+NTH(4, SPLIT(INVENTORYPARENTID, ',')) AS parent4,
+NTH(5, SPLIT(INVENTORYPARENTID, ',')) AS parent5,
+NTH(6, SPLIT(INVENTORYPARENTID, ',')) AS parent6,
+NTH(7, SPLIT(INVENTORYPARENTID, ',')) AS parent7,
+NTH(8, SPLIT(INVENTORYPARENTID, ',')) AS parent8,
+NTH(9, SPLIT(INVENTORYPARENTID, ',')) AS parent9,
+NTH(10, SPLIT(INVENTORYPARENTID, ',')) AS parent10,
+NTH(11, SPLIT(INVENTORYPARENTID, ',')) AS parent11,
+NTH(12, SPLIT(INVENTORYPARENTID, ',')) AS parent12,
+NTH(13, SPLIT(INVENTORYPARENTID, ',')) AS parent13,
+NTH(14, SPLIT(INVENTORYPARENTID, ',')) AS parent14,
+NTH(15, SPLIT(INVENTORYPARENTID, ',')) AS parent15
+FROM [full_WA_data__proper.biotrackthc_inventory]
+WHERE INVENTORYPARENTID != 'NULL' -- elimates nulls, non product types
+AND LENGTH(INVENTORYPARENTID) != 10  -- eliminates concern about those less than 16, (tens);
+LIMIT 5
+
+--Count of those without any THC associated with them 1596825, most likely can be excluded as pre product types
+
+
+
+--************************
+--generates all percentages
+SELECT ID,
+IF(INVENTORYPARENTIDPCT CONTAINS 'NULL', 1, 0) as oneParent,
+NTH(1, SPLIT(INVENTORYPARENTIDPCT, ',')) as parent1,
+IF(NTH(2, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(2, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent2,
+IF(NTH(3, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(3, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent3,
+IF(NTH(4, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(4, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent4,
+IF(NTH(5, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(5, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent5,
+IF(NTH(6, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(6, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent6,
+IF(NTH(7, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(7, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent7,
+IF(NTH(8, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(8, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent8,
+IF(NTH(9, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(9, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent9,
+IF(NTH(10, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(10, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent10,
+IF(NTH(11, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(11, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent11,
+IF(NTH(12, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(12, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent12,
+IF(NTH(13, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(13, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent13,
+IF(NTH(14, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(14, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent14,
+IF(NTH(15, SPLIT(INVENTORYPARENTIDPCT, ',')) IS NULL, 0,float(NTH(15, SPLIT(INVENTORYPARENTIDPCT, ','))))  as parent15,
+FROM [full_WA_data__proper.biotrackthc_inventory]
+
+--problem in the the parent 1 column, convert to zeros in seperate instance if null
+SELECT id, 
+oneParent, 
+IF(parent1 contains 'NULL',1,float(parent1)) as parent1,
+parent2,
+parent3,
+parent4,
+parent5,
+parent6,
+parent7,
+parent8,
+parent9,
+parent10,
+parent11,
+parent12,
+parent13,
+parent14,
+parent15
+FROM [full_WA_data__proper.mgt_inventory_inventoryparentid_split_percentage]

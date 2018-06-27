@@ -1,0 +1,77 @@
+--'Usable Marijuana'
+
+SELECT invtype, 
+YEAR(sale_time) as YEAR,
+MONTH(sale_time) as MONTH,
+count(*) as counter,
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype, YEAR, MONTH
+ORDER BY YEAR,MONTH
+
+--'usable marijuana' counts of missing parents per time period
+SELECT invtype, 
+YEAR(sale_time) as YEAR,
+MONTH(sale_time) as MONTH,
+count(*) as count_of_mult_parent
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Usable Marijuana')
+AND length(inventoryparentid) != 16
+GROUP BY invtype, YEAR,MONTH
+ORDER BY YEAR,MONTH
+
+--'extracts'
+
+SELECT invtype, 
+YEAR(sale_time) as YEAR,
+MONTH(sale_time) as MONTH,
+sum(((r.THC + 0.877 * r.THCA)/100)*usableweight) as totalTHCGrams  --grabss the grams 
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND r.invtype in('Marijuana Extract for Inhalation')
+AND r.usableweight IS NOT NULL #not null
+AND r.usableweight <= 7.0 #No Purchases with weight over 7.0 grams - illegal
+AND r.THC + 0.877 * r.THCA IS NOT NULL # not null
+AND r.THC + 0.877 * r.THCA >= 0 #possible limits
+AND r.THC + 0.877 * r.THCA <= 100 #upper limit
+GROUP BY invtype, YEAR,MONTH
+ORDER BY YEAR,MONTH
+
+--'other counts and price'
+SELECT invtype, YEAR(sale_time) as YEAR,
+MONTH(sale_time) as MONTH,
+count(*) as counter,
+sum(price_x) as price_x
+FROM [full_WA_data__proper.Retail_ALL] 
+WHERE 1=1
+AND INVTYPE != 'Solid Marijuana Infused Edible' 
+AND INVTYPE != 'Liquid Marijuana Infused Edible'
+AND INVTYPE != 'Usable Marijuana'
+AND INVTYPE != 'Marijuana Extract for Inhalation'
+GROUP BY invtype, YEAR, MONTH
+ORDER By invtype, YEAR, MONTH
+
+--'non other counts and price for all periods
+SELECT invtype, 
+YEAR(sale_time) as YEAR,
+MONTH(sale_time) as MONTH,
+count(*) as counter,
+sum(price_x) as price_x
+FROM [full_WA_data__proper.Retail_ALL] r
+WHERE 1=1
+AND (INVTYPE = 'Solid Marijuana Infused Edible' or 
+INVTYPE = 'Liquid Marijuana Infused Edible' or 
+INVTYPE = 'Usable Marijuana' or
+INVTYPE = 'Marijuana Extract for Inhalation')
+GROUP BY invtype, YEAR, MONTH
+ORDER BY invtype, YEAR,MONTH
+
+

@@ -1,0 +1,109 @@
+#### memo usable weight query ####
+
+SELECT sum(d.usableweight) as Weight_Grams, 
+d.INVENTORYTYPE as Inventory_Type,
+YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS Year,
+MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS Month
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Month,Year, Inventory_Type
+ORDER bY Year, Month
+
+####
+
+#total consumption query, except with the joined table with the true THC values
+SELECT 'THC', sum(d.usableweight * p.value/100) AS THCGRAMS, d.INVENTORYTYPE, MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS MONTH2, YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS YEAR2
+FROM [full_WA_data__proper.biotrackthc_dispensing2] dency_analysis] p ON (s.ID = p.SAMPLE_ID)
+WHERE d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (28)
+GROUP BY MONTH2, YEAR2, d.INVENTORYTYPE
+ORDER BY MONTH2, YEAR2
+
+
+
+
+#each in sepearte table usable_THC
+#usable marijuana THC ######
+SELECT 'THC', sum(d.usableweight * p.value/100) AS THCGRAMS, d.INVENTORYTYPE, MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS MONTH2, YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS YEAR2
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (28)
+GROUP BY MONTH2, YEAR2, d.INVENTORYTYPE
+ORDER BY MONTH2, YEAR2
+
+#each in sepearte table extract_THC
+# marijuana for extract THC ######
+SELECT 'THC', sum(d.usableweight * p.value/100) AS THCGRAMS, d.INVENTORYTYPE, MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS MONTH2, YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS YEAR2
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND d.USABLEWEIGHT <= 7.0 #under Washington state law cannot buy anything more than 7 grams of marijuana concentrates.
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (24)
+GROUP BY MONTH2, YEAR2, d.INVENTORYTYPE
+ORDER BY MONTH2, YEAR2
+
+#each in sepearte table usable_consume
+#usable marijuana consumable ######
+SELECT 'CONSUME', sum(d.usableweight) AS GRAMS, d.INVENTORYTYPE, MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS MONTH2, YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS YEAR2
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (28)
+GROUP BY MONTH2, YEAR2, d.INVENTORYTYPE
+ORDER BY MONTH2, YEAR2
+
+#each in sepearte table extract_consume
+# marijuana for extract THC ######
+SELECT 'CONSUME', sum(d.usableweight) AS GRAMS, d.INVENTORYTYPE, MONTH(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS MONTH2, YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) AS YEAR2
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.biotrackthc_inventory] i ON (d.INVENTORYID = i.ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (i.INVENTORYPARENTID = s.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p ON (s.ID = p.SAMPLE_ID) #sample -> potency
+WHERE d.PRICE IS NOT NULL #Data error
+AND d.Price >= 0.0 #elimates negative prices 
+AND NOT i.INVENTORYPARENTID CONTAINS 'NULL'
+AND NOT i.INVENTORYPARENTID CONTAINS ','
+AND d.USABLEWEIGHT <= 7.0 #under Washington state law cannot buy anything more than 7 grams of marijuana concentrates.
+AND d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND p.name = 'Total'
+AND d.SESSIONTIME >= 1412121600 
+AND d.INVENTORYTYPE IN (24)
+GROUP BY MONTH2, YEAR2, d.INVENTORYTYPE
+ORDER BY MONTH2, YEAR2

@@ -1,0 +1,291 @@
+#### memo_gram_calc_v1 queries ####
+#Author : Michael G Turner
+#Date : 3/9/2018
+
+#### usable marijuana - weight ####
+# for 2016
+
+#no constraints
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+Where YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 1 
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT >= 0.5 #Likley to be data error
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 2
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#all constraints 
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#### marijuana extract for inhalation - weight ####
+# for 2016
+
+#no constraints
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+Where YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 1 
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT >= 0.1 #Likley to be data error
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 2
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT <= 7.0 #No Purchases with weight over 7 grams - illegal
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#all constraints 
+SELECT sum(d.usableweight) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+WHERE d.USABLEWEIGHT <= 7.0 #No Purchases with weight over 7 grams - illegal
+AND d.USABLEWEIGHT >= 0.1
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#### usable marijuana - THC weight #####
+
+#constraint 1
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT >= 0.5
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 2
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#constraint 3
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+
+#constraint 4
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE avgTHCTotal <=100
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#all constraints
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT <= 28.4 #No Purchases with weight over 28.4 grams - illegal
+AND d.USABLEWEIGHT >= 0.5
+AND avgTHCTotal <=100
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (28)
+GROUP BY Inventory_Type
+
+#### marijuana extract for inhalation - THC weight ####
+
+#constraint 1
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT >= 0.1
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (24)
+GROUP BY Inventory_Type
+
+#constraint 2
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT <= 7.0 #No Purchases with weight over 28.4 grams - illegal
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (24)
+GROUP BY Inventory_Type
+
+#constraint 3
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (24)
+GROUP BY Inventory_Type
+
+
+#constraint 4
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE avgTHCTotal <=100
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (24)
+GROUP BY Inventory_Type
+
+#all constraints
+SELECT sum(d.usableweight*t.avgTHCTotal/100) as Weight_Grams, count(*) as counter,
+d.INVENTORYTYPE as Inventory_Type,
+FROM [full_WA_data__proper.biotrackthc_dispensing2] d
+JOIN [full_WA_data__proper.mgt_inventory_inventoryparentid_split_THC] t on (d.inventoryid = t.i_inventoryID)
+WHERE d.USABLEWEIGHT <= 7.0 #No Purchases with weight over 7.0 grams - illegal
+AND d.USABLEWEIGHT >= 0.1
+AND avgTHCTotal <=100
+AND YEAR(SEC_TO_TIMESTAMP(d.SESSIONTIME)) == 2016 # year of interest
+AND d.INVENTORYTYPE IN (24)
+GROUP BY Inventory_Type
+
+#### THC generation queries ####
+
+#isolate corrected THC total for each INVENTORYPARENTID
+#becomes tables mgt_samples_inventoryparentid_trueTHCtotal
+SELECT s.INVENTORYPARENTID, round(p1.VALUE + 0.877 * p2.VALUE,3) AS trueTHCTotal, 
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis] p1
+JOIN (
+SELECT SAMPLE_ID, NAME, VALUE
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis]
+WHERE NAME = 'THCA'
+) p2 ON (p1.SAMPLE_ID = p2.SAMPLE_ID)
+JOIN (
+SELECT SAMPLE_ID, NAME, VALUE
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis]
+WHERE NAME = 'Total'
+) p3 ON (p2.SAMPLE_ID = p3.SAMPLE_ID)
+JOIN [full_WA_data__proper.biotrackthc_labresults_samples] s ON (s.ID = p1.SAMPLE_ID)
+WHERE p1.NAME = 'THC'
+
+#seperates the inventoryparentids for all inventory items
+#held in  [full_WA_data__proper.mgt_inventory_inventoryparentid_split_noTHC]
+#isolates the inventory parent id and seperates them into distinct columns.  
+#15 parents was choosen due to a limitation in the columns where they were held
+#any additional queries beyond the first 15 are truncated 
+SELECT id,
+FIRST(SPLIT(INVENTORYPARENTID, ',')) AS parent1,
+NTH(2, SPLIT(INVENTORYPARENTID, ',')) AS parent2,
+NTH(3, SPLIT(INVENTORYPARENTID, ',')) AS parent3,
+NTH(4, SPLIT(INVENTORYPARENTID, ',')) AS parent4,
+NTH(5, SPLIT(INVENTORYPARENTID, ',')) AS parent5,
+NTH(6, SPLIT(INVENTORYPARENTID, ',')) AS parent6,
+NTH(7, SPLIT(INVENTORYPARENTID, ',')) AS parent7,
+NTH(8, SPLIT(INVENTORYPARENTID, ',')) AS parent8,
+NTH(9, SPLIT(INVENTORYPARENTID, ',')) AS parent9,
+NTH(10, SPLIT(INVENTORYPARENTID, ',')) AS parent10,
+NTH(11, SPLIT(INVENTORYPARENTID, ',')) AS parent11,
+NTH(12, SPLIT(INVENTORYPARENTID, ',')) AS parent12,
+NTH(13, SPLIT(INVENTORYPARENTID, ',')) AS parent13,
+NTH(14, SPLIT(INVENTORYPARENTID, ',')) AS parent14,
+NTH(15, SPLIT(INVENTORYPARENTID, ',')) AS parent15
+FROM [full_WA_data__proper.biotrackthc_inventory]
+WHERE INVENTORYPARENTID != 'NULL' -- elimates nulls 
+AND LENGTH(INVENTORYPARENTID) >= 16  -- eliminates concern about those less than 16, (tens) --only full left
+
+#finds the true thc for each inventory
+
+#takes the average across all known parents
+#becomes mgt_inventory_inventoryparentid_split_THC
+
+-- final code
+SELECT i.i_inventoryID,
+ROUND((IFNULL(s1.trueTHCTOTAL,0) + --total across all parents
+IFNULL(s2.trueTHCTOTAL,0) + 
+IFNULL(s3.trueTHCTOTAL,0) +
+IFNULL(s4.trueTHCTOTAL,0) + 
+IFNULL(s5.trueTHCTOTAL,0) +
+IFNULL(s6.trueTHCTOTAL,0) + 
+IFNULL(s7.trueTHCTOTAL,0) +
+IFNULL(s8.trueTHCTOTAL,0) + 
+IFNULL(s9.trueTHCTOTAL,0) +
+IFNULL(s10.trueTHCTOTAL,0) + 
+IFNULL(s11.trueTHCTOTAL,0) +
+IFNULL(s12.trueTHCTOTAL,0) + 
+IFNULL(s13.trueTHCTOTAL,0) +
+IFNULL(s14.trueTHCTOTAL,0) + 
+IFNULL(s15.trueTHCTOTAL,0))
+/ 
+(IF(s1.trueTHCTOTAL IS NOT NULL, 1, 0)+  -- count of parents
+IF(s2.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s3.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s4.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s5.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s6.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s7.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s8.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s9.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s10.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s11.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s12.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s13.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s14.trueTHCTOTAL IS NOT NULL, 1, 0)+
+IF(s15.trueTHCTOTAL IS NOT NULL, 1, 0)),2) AS avgTHCTotal
+
+FROM [full_WA_data__proper.mgt_inventory_inventoryparentid_split_noTHC] i
+LEFT JOIN [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s1 ON (i.parent1 = s1.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s2 ON (i.parent2 = s2.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s3 ON (i.parent3 = s3.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s4 ON (i.parent4 = s4.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s5 ON (i.parent5 = s5.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s6 ON (i.parent6 = s6.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s7 ON (i.parent7 = s7.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s8 ON (i.parent8 = s8.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s9 ON (i.parent9 = s9.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s10 ON (i.parent10 = s10.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s11 ON (i.parent11 = s11.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s12 ON (i.parent12 = s12.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s13 ON (i.parent13 = s13.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s14 ON (i.parent14 = s14.Sample_InventoryParentID)
+LEFT JOIN  [full_WA_data__proper.mgt_samples_inventoryparentid_trueTHCtotal] s15 ON (i.parent15 = s15.Sample_InventoryParentID) 
+
+

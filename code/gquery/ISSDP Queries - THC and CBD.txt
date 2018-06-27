@@ -1,0 +1,304 @@
+--GENERAL*************************************************
+--****************************************************
+--THC Numbers _____________________________________ ---> creates mgt_split
+SELECT 
+i.id,
+i.INVENTORYPARENTID,
+NTH(1, SPLIT(i.INVENTORYPARENTID , ',')) as parent1,
+NTH(1, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent1_pct, 
+NTH(2, SPLIT(i.INVENTORYPARENTID , ',')) as parent2,
+NTH(2, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent2_pct, 
+NTH(3, SPLIT(i.INVENTORYPARENTID , ',')) as parent3,
+NTH(3, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent3_pct, 
+NTH(4, SPLIT(i.INVENTORYPARENTID , ',')) as parent4,
+NTH(4, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent4_pct, 
+NTH(5, SPLIT(i.INVENTORYPARENTID , ',')) as parent5,
+NTH(5, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent5_pct, 
+NTH(6, SPLIT(i.INVENTORYPARENTID , ',')) as parent6,
+NTH(6, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent6_pct, 
+NTH(7, SPLIT(i.INVENTORYPARENTID , ',')) as parent7,
+NTH(7, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent7_pct, 
+NTH(8, SPLIT(i.INVENTORYPARENTID , ',')) as parent8,
+NTH(8, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent8_pct, 
+NTH(9, SPLIT(i.INVENTORYPARENTID , ',')) as parent9,
+NTH(9, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent9_pct, 
+NTH(10, SPLIT(i.INVENTORYPARENTID , ',')) as parent10,
+NTH(10, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent10_pct, 
+NTH(11, SPLIT(i.INVENTORYPARENTID , ',')) as parent11,
+NTH(11, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent11_pct, 
+NTH(12, SPLIT(i.INVENTORYPARENTID , ',')) as parent12,
+NTH(12, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent12_pct, 
+NTH(13, SPLIT(i.INVENTORYPARENTID , ',')) as parent13,
+NTH(13, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent13_pct, 
+NTH(14, SPLIT(i.INVENTORYPARENTID , ',')) as parent14,
+NTH(14, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent14_pct, 
+NTH(15, SPLIT(i.INVENTORYPARENTID , ',')) as parent15,
+NTH(15, SPLIT(i.INVENTORYPARENTIDPCT, ',')) as parent15_pct, 
+FROM [full_WA_data__proper.biotrackthc_inventory] i
+WHERE LENGTH(i.INVENTORYPARENTID) > 16
+
+
+--THC*************************************************
+--****************************************************
+--THC Numbers _____________________________________ ---> creates mgt_thc
+
+--SELECT (THC + 0.877 * THCA)
+SELECT s.INVENTORYPARENTID as INVENTORYPARENTID, 
+THC.VALUE + 0.877 * THCA.VALUE as Total_THC
+
+--SAMPLE
+FROM [full_WA_data__proper.biotrackthc_labresults_samples] s 
+ 
+
+--THC
+JOIN (SELECT * 
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis] 
+WHERE name = 'THC') as THC on (s.ID = THC.SAMPLE_ID)
+
+--THCA
+JOIN (SELECT * 
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis] 
+WHERE name = 'THCA') as THCA on (s.ID = THCA.SAMPLE_ID)
+
+--WHERE CONDITION
+WHERE 1=1
+AND LENGTH(s.INVENTORYPARENTID) = 16 --eliminates a handful of errors
+
+--LIMITS
+LIMIT 5
+
+--****************************************************
+--THC - Inventory/ THC with 1 parent ______________  --> creates mgt_thc_inventory
+
+--SELECT ID, inventoryparentid, and TOTAL THC
+SELECT i.id, i.inventoryparentid, THC.Total_THC
+
+--JOIN Inventory and THC
+FROM [full_WA_data__proper.biotrackthc_inventory] as i
+JOIN [full_WA_data__proper.mgt_THC] as THC on(i.inventoryparentid = THC.INVENTORYPARENTID) 
+
+--only those with 1 parent
+WHERE LENGTH(i.inventoryparentid) == 16
+
+--****************************************************
+--THC - Inventory > 1 parent_______________________ appends to mgt_thc_inventory
+SELECT s.i_id as i_id,
+s.i_INVENTORYPARENTID as i_inventoryparentid,
+
+--gets the total sum
+NVL(float(s.parent1_pct),0)  * p1.Total_THC +
+NVL(float(s.parent2_pct),0)  * p2.Total_THC +
+NVL(float(s.parent3_pct),0)  * p3.Total_THC +
+NVL(float(s.parent4_pct),0)  * p4.Total_THC +
+NVL(float(s.parent5_pct),0)  * p5.Total_THC +
+NVL(float(s.parent6_pct),0)  * p6.Total_THC +
+NVL(float(s.parent7_pct),0)  * p7.Total_THC +
+NVL(float(s.parent8_pct),0)  * p8.Total_THC +
+NVL(float(s.parent9_pct),0)  * p9.Total_THC +
+NVL(float(s.parent10_pct),0)  * p10.Total_THC +
+NVL(float(s.parent11_pct),0)  * p11.Total_THC +
+NVL(float(s.parent12_pct),0)  * p12.Total_THC +
+NVL(float(s.parent13_pct),0)  * p13.Total_THC +
+NVL(float(s.parent14_pct),0)  * p14.Total_THC +
+NVL(float(s.parent15_pct),0)  * p15.Total_THC
+
+FROM [full_WA_data__proper.mgt_split] s
+JOIN [full_WA_data__proper.mgt_THC] p1 on (s.parent1 = p1.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p2 on (s.parent2 = p2.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p3 on (s.parent3 = p3.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p4 on (s.parent4 = p4.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p5 on (s.parent5 = p5.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p6 on (s.parent6 = p6.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p7 on (s.parent7 = p7.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p8 on (s.parent8 = p8.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p9 on (s.parent9 = p9.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p10 on (s.parent10 = p10.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p11 on (s.parent11 = p11.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p12 on (s.parent12 = p12.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p13 on (s.parent13 = p13.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p14 on (s.parent14 = p14.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_THC] p15 on (s.parent15 = p15.INVENTORYPARENTID)
+
+LIMIT 5
+
+
+
+
+--_________________________________________________
+
+
+--CBD*************************************************
+--CBD Numbers _____________________________________ ---> creates mgt_CBD
+
+--SELECT (CBD + 0.877 * CBDA)
+SELECT s.INVENTORYPARENTID as INVENTORYPARENTID,  
+(CBD.value + (0.877 * CBDA.value)) as Total_CBD
+
+--SAMPLE
+FROM [full_WA_data__proper.biotrackthc_labresults_samples] as s
+ 
+--CDB
+JOIN (SELECT * 
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis] 
+WHERE name = 'CBD') as CBD on (s.ID = CBD.SAMPLE_ID)
+
+--CDBA
+JOIN (SELECT * 
+FROM [full_WA_data__proper.biotrackthc_labresults_potency_analysis] 
+WHERE name = 'CBDA') as CBDA on (s.ID  = CBDA.SAMPLE_ID)
+
+--WHERE
+WHERE 1=1
+AND length(s.INVENTORYPARENTID) = 16
+
+--LIMITS
+LIMIT 5
+
+--****************************************************
+--CBD - Inventory/ THC with 1 parent ______________  --> creates mgt_CBD_inventory
+
+--SELECT ID, inventoryparentid, and TOTAL CBD
+SELECT i.id, i.inventoryparentid, CBD.Total_CBD
+
+--JOIN Inventory and THC
+FROM [full_WA_data__proper.biotrackthc_inventory] as i
+JOIN [full_WA_data__proper.mgt_CBD] as CBD on(i.inventoryparentid = CBD.INVENTORYPARENTID) 
+
+--only those with 1 parent
+WHERE LENGTH(i.inventoryparentid) == 16
+
+--****************************************************
+--CBD - Inventory > 1 parent_______________________ appends to mgt_cbd_inventory
+SELECT s.i_id as i_id,
+s.i_INVENTORYPARENTID as i_inventoryparentid,
+
+--gets the total sum
+NVL(float(s.parent1_pct),0)  * p1.Total_CBD +
+NVL(float(s.parent2_pct),0)  * p2.Total_CBD +
+NVL(float(s.parent3_pct),0)  * p3.Total_CBD +
+NVL(float(s.parent4_pct),0)  * p4.Total_CBD +
+NVL(float(s.parent5_pct),0)  * p5.Total_CBD +
+NVL(float(s.parent6_pct),0)  * p6.Total_CBD +
+NVL(float(s.parent7_pct),0)  * p7.Total_CBD +
+NVL(float(s.parent8_pct),0)  * p8.Total_CBD +
+NVL(float(s.parent9_pct),0)  * p9.Total_CBD +
+NVL(float(s.parent10_pct),0)  * p10.Total_CBD +
+NVL(float(s.parent11_pct),0)  * p11.Total_CBD +
+NVL(float(s.parent12_pct),0)  * p12.Total_CBD +
+NVL(float(s.parent13_pct),0)  * p13.Total_CBD +
+NVL(float(s.parent14_pct),0)  * p14.Total_CBD +
+NVL(float(s.parent15_pct),0)  * p15.Total_CBD as CBD_Total_CBD
+
+FROM [full_WA_data__proper.mgt_split] s
+JOIN [full_WA_data__proper.mgt_CBD] p1 on (s.parent1 = p1.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p2 on (s.parent2 = p2.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p3 on (s.parent3 = p3.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p4 on (s.parent4 = p4.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p5 on (s.parent5 = p5.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p6 on (s.parent6 = p6.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p7 on (s.parent7 = p7.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p8 on (s.parent8 = p8.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p9 on (s.parent9 = p9.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p10 on (s.parent10 = p10.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p11 on (s.parent11 = p11.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p12 on (s.parent12 = p12.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p13 on (s.parent13 = p13.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p14 on (s.parent14 = p14.INVENTORYPARENTID)
+JOIN [full_WA_data__proper.mgt_CBD] p15 on (s.parent15 = p15.INVENTORYPARENTID)
+
+--_________________________________________________
+
+--Primary Key Merger*****************************************
+--****************************************************
+   
+---> overwrite mgt_thc_inventory
+
+SELECT *,
+NVL(float(SUBSTRING(i_inventoryparentid,1,16)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,18,33)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,35,50)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,52,67)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,69,84)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,86,101)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,103,118)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,120,135)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,137,152)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,154,169)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,171,186)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,188,203)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,205,220)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,222,237)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,239,254)),0) as i_inventoryparentid_float
+FROM [full_WA_data__proper.mgt_thc_inventory] 
+
+---> overwrite mgt_cbd_inventory
+
+SELECT *,
+(NVL(float(SUBSTRING(i_inventoryparentid,1,16)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,18,33)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,35,50)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,52,67)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,69,84)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,86,101)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,103,118)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,120,135)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,137,152)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,154,169)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,171,186)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,188,203)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,205,220)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,222,237)),0)+
+NVL(float(SUBSTRING(i_inventoryparentid,239,254)),0)) as i_inventoryparentid_float
+FROM [full_WA_data__proper.mgt_CBD_inventory] 
+
+--->overwrite retail all
+SELECT *,
+(NVL(float(SUBSTRING(inventoryparentid,1,16)),0)+
+NVL(float(SUBSTRING(inventoryparentid,18,33)),0)+
+NVL(float(SUBSTRING(inventoryparentid,35,50)),0)+
+NVL(float(SUBSTRING(inventoryparentid,52,67)),0)+
+NVL(float(SUBSTRING(inventoryparentid,69,84)),0)+
+NVL(float(SUBSTRING(inventoryparentid,86,101)),0)+
+NVL(float(SUBSTRING(inventoryparentid,103,118)),0)+
+NVL(float(SUBSTRING(inventoryparentid,120,135)),0)+
+NVL(float(SUBSTRING(inventoryparentid,137,152)),0)+
+NVL(float(SUBSTRING(inventoryparentid,154,169)),0)+
+NVL(float(SUBSTRING(inventoryparentid,171,186)),0)+
+NVL(float(SUBSTRING(inventoryparentid,188,203)),0)+
+NVL(float(SUBSTRING(inventoryparentid,205,220)),0)+
+NVL(float(SUBSTRING(inventoryparentid,222,237)),0)+
+NVL(float(SUBSTRING(inventoryparentid,239,254)),0)) as inventoryparentid_float
+FROM [full_WA_data__proper.Retail_ALL] 
+
+
+
+--Culmination*****************************************
+--****************************************************  ----> builds mgt_retail_thin
+
+
+---fix cbd and thc and retail to all have the same units
+SELECT i_id, THC_Total_THC, float(i_id)/1000000000000000 as i_id_float
+FROM [full_WA_data__proper.mgt_thc_inventory]
+
+SELECT i_id, THC_Total_CBD, float(i_id)/1000000000000000 as i_id_float
+FROM [full_WA_data__proper.mgt_CBD_inventory]
+
+SELECT *, float(inventoryid)/1000000000000000 
+FROM [full_WA_data__proper.Retail_ALL]
+--_________________________________________________
+
+--all the information we need from inventory
+SELECT r.inventoryid/1000000000000000, r.sale_time, r.usableweight, r.inventorytype, r.price, 
+thc.THC_Total_THC as Total_THC, cbd.CBD_Total_CBD as Total_CBD
+FROM [full_WA_data__proper.Retail_ALL] r
+
+--join on THC and CBD information
+JOIN [full_WA_data__proper.mgt_thc_inventory] thc on (float(r.inventoryid)/1000000000000000 = float(thc.i_id)/1000000000000000)
+JOIN [full_WA_data__proper.mgt_CBD_inventory] cbd on (float(r.inventoryid)/1000000000000000 = float(cbd.i_id)/1000000000000000)
+
+LIMIT 5
+
+
+
+
+

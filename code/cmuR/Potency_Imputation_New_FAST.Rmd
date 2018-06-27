@@ -1,0 +1,1214 @@
+---
+title: "Potency_Imputation"
+author: "Anhvinh Doanvo"
+date: "March 21, 2018"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("~/CMU_Y2/RAND")
+
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+options(scipen = 7)
+```
+
+```{r}
+# install.packages("knitr")
+# install.packages("ggplot2")
+# install.packages("glmnet")
+# install.packages("stringr")
+# install.packages("tibble")
+# install.packages("plyr")
+# install.packages("randomForest")
+# install.packages("tm")
+# install.packages("qdap")
+# install.packages("rmarkdown")
+# install.packages("ranger")
+library(knitr)
+library(ggplot2)
+library(glmnet)
+library(stringr)
+library(tibble)
+library(plyr)
+library(randomForest)
+library(tm)
+#library(qdap)
+library(ranger)
+```
+
+
+
+# Background Data Loading
+
+```{r}
+censusdata <- read.csv("biotrackthc_locations_cenus_joined.csv")
+```
+
+Census data was downloaded from [this source](https://www.census.gov/geo/maps-data/data/tiger-data.html). I selected the 2015 "detailed tables" for the Washington State block group. The "X19_INCOME" table was table-joined to the "ACS_2015_5YR_BG_53_WASHINGTON" shapefile using X19's GEOID and ACS's GEOID_Data fields. Furthermore, the stores identified in the biotrackthc_locations table were geocoded using their latitude and longitudinal coordinates.
+
+These stores were spatial-joined to their associated census tract to relate them to demographic data of their surrounding region.
+
+Using this data, an 'income index' was calculated for each store by compositing counts of individuals in each income bracket per store in each census tract. The data coding information sourced from the American Community Survey is in a code chunk in this rmd file.
+
+```{r, eval=FALSE, include=FALSE}
+B19001e2	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): Less than $10,000: Households -- (Estimate)
+B19001m2	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): Less than $10,000: Households -- (Margin of Error)
+B19001e3	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $10,000 to $14,999: Households -- (Estimate)
+B19001m3	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $10,000 to $14,999: Households -- (Margin of Error)
+B19001e4	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $15,000 to $19,999: Households -- (Estimate)
+B19001m4	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $15,000 to $19,999: Households -- (Margin of Error)
+B19001e5	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $20,000 to $24,999: Households -- (Estimate)
+B19001m5	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $20,000 to $24,999: Households -- (Margin of Error)
+B19001e6	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $25,000 to $29,999: Households -- (Estimate)
+B19001m6	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $25,000 to $29,999: Households -- (Margin of Error)
+B19001e7	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $30,000 to $34,999: Households -- (Estimate)
+B19001m7	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $30,000 to $34,999: Households -- (Margin of Error)
+B19001e8	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $35,000 to $39,999: Households -- (Estimate)
+B19001m8	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $35,000 to $39,999: Households -- (Margin of Error)
+B19001e9	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $40,000 to $44,999: Households -- (Estimate)
+B19001m9	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $40,000 to $44,999: Households -- (Margin of Error)
+B19001e10	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $45,000 to $49,999: Households -- (Estimate)
+B19001m10	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $45,000 to $49,999: Households -- (Margin of Error)
+B19001e11	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $50,000 to $59,999: Households -- (Estimate)
+B19001m11	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $50,000 to $59,999: Households -- (Margin of Error)
+B19001e12	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $60,000 to $74,999: Households -- (Estimate)
+B19001m12	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $60,000 to $74,999: Households -- (Margin of Error)
+B19001e13	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $75,000 to $99,999: Households -- (Estimate)
+B19001m13	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $75,000 to $99,999: Households -- (Margin of Error)
+B19001e14	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $100,000 to $124,999: Households -- (Estimate)
+B19001m14	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $100,000 to $124,999: Households -- (Margin of Error)
+B19001e15	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $125,000 to $149,999: Households -- (Estimate)
+B19001m15	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $125,000 to $149,999: Households -- (Margin of Error)
+B19001e16	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $150,000 to $199,999: Households -- (Estimate)
+B19001m16	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $150,000 to $199,999: Households -- (Margin of Error)
+B19001e17	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $200,000 or more: Households -- (Estimate)
+B19001m17	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $200,000 or more: Households -- (Margin of Error)
+```
+
+
+```{r calculate income index}
+censusdata$incomeindexlow <- (censusdata$X19_INCOME_B19001e2 * 5000 +
+censusdata$X19_INCOME_B19001e3 * 12500 +
+censusdata$X19_INCOME_B19001e4 * 17500 +
+censusdata$X19_INCOME_B19001e5 * 22500 +
+censusdata$X19_INCOME_B19001e6 * 27500 +
+censusdata$X19_INCOME_B19001e7 * 32500 +
+censusdata$X19_INCOME_B19001e8 * 37500 +
+censusdata$X19_INCOME_B19001e9 * 42500 +
+censusdata$X19_INCOME_B19001e10 * 47500 +
+censusdata$X19_INCOME_B19001e11 * 55000 +
+censusdata$X19_INCOME_B19001e12 * 67500 +
+censusdata$X19_INCOME_B19001e13 * 87500 +
+censusdata$X19_INCOME_B19001e14 * 112500 +
+censusdata$X19_INCOME_B19001e15 * 137500 +
+censusdata$X19_INCOME_B19001e16 * 175000) / (censusdata$X19_INCOME_B19001e2 +
+censusdata$X19_INCOME_B19001e3 +
+censusdata$X19_INCOME_B19001e4 +
+censusdata$X19_INCOME_B19001e5 +
+censusdata$X19_INCOME_B19001e6 +
+censusdata$X19_INCOME_B19001e7 +
+censusdata$X19_INCOME_B19001e8 +
+censusdata$X19_INCOME_B19001e9 +
+censusdata$X19_INCOME_B19001e10 +
+censusdata$X19_INCOME_B19001e11 +
+censusdata$X19_INCOME_B19001e12 +
+censusdata$X19_INCOME_B19001e13 +
+censusdata$X19_INCOME_B19001e14 +
+censusdata$X19_INCOME_B19001e15 +
+censusdata$X19_INCOME_B19001e16) #for lower incomes, get average estimated
+
+censusdata$incomeindexhigh <- censusdata$X19_INCOME_B19001e17 / (censusdata$X19_INCOME_B19001e2 +
+censusdata$X19_INCOME_B19001e3 +
+censusdata$X19_INCOME_B19001e4 +
+censusdata$X19_INCOME_B19001e5 +
+censusdata$X19_INCOME_B19001e6 +
+censusdata$X19_INCOME_B19001e7 +
+censusdata$X19_INCOME_B19001e8 +
+censusdata$X19_INCOME_B19001e9 +
+censusdata$X19_INCOME_B19001e10 +
+censusdata$X19_INCOME_B19001e11 +
+censusdata$X19_INCOME_B19001e12 +
+censusdata$X19_INCOME_B19001e13 +
+censusdata$X19_INCOME_B19001e14 +
+censusdata$X19_INCOME_B19001e15 +
+censusdata$X19_INCOME_B19001e16 +
+censusdata$X19_INCOME_B19001e17) # for very high-income indivduals, just grab percentage in that bracket
+
+storeincomes <- data.frame(inv_location = censusdata$ID,
+                           incomeindexlow = censusdata$incomeindexlow,
+                           incomeindexhigh = censusdata$incomeindexhigh)
+
+#de-duplicate
+storeincomes <- storeincomes[!duplicated(storeincomes),]
+
+#de-duplication fails for stores with multiple locations
+#in this case, average them...
+storeincomeslow <- aggregate(incomeindexlow ~ inv_location, 
+                          data = storeincomes,
+                          FUN = mean)
+storeincomeshigh <- aggregate(incomeindexhigh ~ inv_location, 
+                          data = storeincomes,
+                          FUN = mean)
+storeincomes <- merge(x = storeincomeslow, y = storeincomeshigh, by = "inv_location") 
+rm(storeincomeslow)
+rm(storeincomeshigh)
+###NEED TO CHECK THIS WORK
+```
+
+
+# Usables
+
+```{r Usables sql, eval=FALSE}
+===Retrieve key columns===
+SELECT
+#store_loc, #don't need this--this isn't where the product is sold
+thc,
+thca,
+cbd,
+cbda,
+inv_productname,
+transactionid, #maybe useful for basket analysis?
+sale_time,
+weight,
+usableweight,
+inventorytype,
+price_x,
+gram_price_x,
+invtype,
+inv_location #this information is where the product is sold
+
+FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+WHERE invtype == 'Usable Marijuana' 
+AND YEAR > 2016 #GRAB 2017 ONLY
+==============================
+===Random sampling===
+SELECT *
+FROM [rand-systems:TEAM_WORKSPACE_USE_ME.AD_retailusables]
+WHERE RAND() < 100000/79292961  #format: rough number of rows desired / total rows in table
+#this gets approximate random sample with scalable code
+==============================
+```
+
+
+```{r load usables data}
+usables <- read.csv("AD_retailusables_100ksample.csv")
+usables[usables == "NULL"] <- NA
+
+usables <- usables[ , !(names(usables) %in% "invtype")]
+
+#join usables to census data
+usables_joined <- merge(x = usables, y = storeincomes, by = "inv_location", all.x = TRUE)
+usables <- usables_joined
+rm(usables_joined)
+```
+
+
+When transactions were joined to the census data, there were, notably, just a few transactions that were not associated with a specific location.
+
+```{r}
+table(is.na(usables$incomeindexlow))
+```
+
+These transactions were removed from the dataset to prevent computational errors.
+
+```{r}
+usables <- usables[!(is.na(usables$incomeindexlow)),]
+```
+
+We then calculated the THC and CBD contents of each transaction by creating composite potency metrics (e.g. THC + THCA) and multiplying each potency metric by the usable weights.
+
+```{r calculate content and potencies}
+usables$thc[is.na(usables$thc)] <- 0
+usables$thca[is.na(usables$thca)] <- 0
+usables$cbd[is.na(usables$cbd)] <- 0
+usables$cbda[is.na(usables$cbda)] <- 0
+
+#relative potency for THCA source: http://www.canorml.org/RingTestOShaughnessys_Aut11.pdf
+usables$Potency_THC <- usables$thc + 0.877 * usables$thca
+
+#CBD molar mass sources below:
+#https://pubchem.ncbi.nlm.nih.gov/compound/cannabidiol
+#https://pubchem.ncbi.nlm.nih.gov/compound/Cannabidiolic_acid
+usables$Potency_CBD <- usables$cbd + usables$cbda *  (314.469 / 358.478)
+
+usables$Potency_THC <- usables$Potency_THC / 100 #convert percentage to decimal
+usables$Potency_CBD <- usables$Potency_CBD / 100
+
+usables <- usables[ , !(names(usables) %in% c("cbd", "cbda", "thc", "thca"))]
+
+#calculate content
+usables$Content_THC <- usables$Potency_THC * usables$usableweight
+usables$Content_CBD <- usables$Potency_CBD * usables$usableweight
+```
+
+
+
+```{r}
+usables_CBD <- usables[usables$Content_CBD > usables$Content_THC,] #copy out CBD stuff
+usables <- usables[usables$Content_CBD < usables$Content_THC,] #remove CBD stuff
+
+usables_CBD$CBD_THCratio <- usables_CBD$Content_CBD / usables_CBD$Content_THC
+```
+
+
+There were a `r nrow(usables_CBD)` products associated with higher CBD content than THC content. These were subsetted out from the predictive model as they have a different relationship between THC and CBD.
+
+## Income Data Exploration
+
+```{r}
+ggplot(usables, aes(incomeindexlow)) +
+  geom_density() +
+  labs(title = "Distribution of Average Census Tract Incomes < 200k Across Transactions")
+
+ggplot(usables, aes(incomeindexhigh)) +
+  geom_density() +
+  labs(title = "Distribution of Population Proportions > 200k in Local Census Tract Across Transactions")
+```
+
+
+## Predictive Modeling: Preliminary
+
+We ran a lasso model to get some idea on what variables are most strongly predictive of THC content.
+
+```{r construct lasso}
+#pull key variables
+#variables that would be unknown are commented out
+usables_data <- usables[,(names(usables) %in% c("inv_productname",
+                                                "sale_time",
+                                                "weight",
+                                                #"usableweight",
+                                                "price_x",
+                                                "incomeindexlow",
+                                                "incomeindexhigh",
+                                                #"Potency_THC",
+                                                #"Potency_CBD",
+                                                "Content_THC"#,
+                                                #"Content_CBD"
+                                                ))]
+
+usables_data$sale_time <- as.numeric(as.POSIXct(as.character(usables_data$sale_time)))
+
+#run lasso
+library(glmnet)
+
+usables.y <- usables_data[,"Content_THC"]
+usables.x <- usables_data[,
+                          (names(usables_data) %in% c("price_x",
+                                                "sale_time",
+                                                "weight",
+                                                "incomeindexlow",
+                                                "incomeindexhigh"
+                                                ))]
+#lasso can't deal with na values. Pull complete.cases to remove nas.
+usables_complete_cases_checker <- complete.cases(cbind(usables.y, usables.x))
+usables.y <- usables.y[usables_complete_cases_checker]
+usables.x <- usables.x[usables_complete_cases_checker,]
+
+usables.lasso <- glmnet(y = usables.y, x =  as.matrix(usables.x))
+```
+
+
+```{r plot lasso}
+# plot(usables.lasso, label=TRUE)
+lbs_fun <- function(fit, ...) {
+        L <- length(fit$lambda)
+        x <- log(fit$lambda[L])
+        y <- fit$beta[, L]
+        labs <- names(y)
+        text(x, y, labels=labs, ...)
+}
+
+# plot
+plot(usables.lasso, xvar="lambda")
+
+# label
+lbs_fun(usables.lasso)
+
+predict(usables.lasso, type="coefficients")
+```
+
+
+```{r}
+usables.lasso <- cv.glmnet(y = usables.y, x =  as.matrix(usables.x))
+
+plot(usables.lasso)
+```
+
+```{r}
+usables.lm <- lm(Content_THC ~., data = usables_data[,!(names(usables_data) %in% c("inv_productname"))]
+                 )
+summary(usables.lm)
+```
+
+## Usables Feature Engineering
+
+Since prices change over time, we decided to include an interaction between price and time to see if that interaction variable might improve the model.
+
+```{r pricetime feature engineering edibles}
+pricetime <- usables_data$sale_time - mean(usables_data$sale_time, na.rm=TRUE) #normalize at 0
+pricetime <- pricetime * usables_data$price_x #interact
+
+usables_features <- data.frame(pricetime = pricetime)
+rm(pricetime)
+
+usables_features <- usables_features[usables_complete_cases_checker,]
+```
+
+```{r}
+usables_features.lasso <- glmnet(y = usables.y, x =  as.matrix(cbind(usables.x,                                                               usables_features)))
+#^^Use usables_complete_cases_checker to make sure things line up
+
+# plot
+plot(usables_features.lasso, xvar="lambda")
+
+# label
+lbs_fun(usables_features.lasso)
+
+predict(usables_features.lasso, type="coefficients")
+```
+
+```{r}
+usables_features.lasso <- cv.glmnet(y = usables.y, x =  as.matrix(cbind(usables.x,                                                               usables_features)))
+
+plot(usables_features.lasso)
+```
+
+
+
+```{r lm interaction}
+usables_features.lm <- lm(Content_THC ~.,
+                          data = cbind(usables_data[usables_complete_cases_checker,
+                                                           !(names(usables_data) %in% c("inv_productname"))],
+                                              usables_features)
+                 )
+summary(usables_features.lm)
+```
+
+## Cross Validation
+
+```{r function declaration}
+# library(DAAG)
+# usables.lm.cv <- cv.lm(data = cbind(usables_data[usables_complete_cases_checker,
+#                                                            !(names(usables_data) %in% c("inv_productname"))],
+#                                               usables_features),
+#                        form.lm = formula(Content_THC ~.), m=5)
+
+linear_regress.cv <- function(yvar_, xvars, n){
+  #yvar = y variable vector
+  #xvars = dataframe of independent variables
+  #n = nfolds
+  
+  #label partitions
+  partitionids <-  sample(1:n, length(yvar_), replace = TRUE)
+  yvar <- data.frame(yvar = yvar_, partitionid = partitionids)
+  xvars$partitionid <- partitionids
+  
+  errorpercentage_TRANSACTION <- c()
+  marketsize_error <- c()
+  mean_error <- c()
+  for (i in 1:n){
+    #subset
+    ytrain <- yvar[yvar$partitionid != i, "yvar"]
+    xtrain <- xvars[xvars$partitionid != i, !(names(xvars) %in% "partitionid")]
+    training <- cbind(ytrain, xtrain)
+    
+    ytest <- yvar[yvar$partitionid == i, "yvar"]
+    xtest <- xvars[xvars$partitionid == i, !(names(xvars) %in% "partitionid")]
+    testing <- cbind(ytest, xtest)
+    
+    
+    ##unweighted regression
+    
+    #train model
+    trained.lm <- lm(ytrain ~., data = training)
+
+    #predict
+    testing$predictions <- predict(trained.lm, testing)
+    
+    #two evaluation metrics: percentage error and weighted errors (weight by thc quantity)
+    errorpercentage_TRANSACTION <- c(errorpercentage_TRANSACTION,
+                                     mean(abs((testing$predictions / testing$ytest) - 1)))
+    marketsize_error <- c(marketsize_error,
+                         abs(sum(testing$ytest) - sum(testing$predictions)) / sum(testing$ytest))
+    
+    mean_error <- c(mean_error, mean(abs((testing$predictions / testing$ytest) - 1)))
+  }
+  
+  return(list(mean_errorpercentage_TRANSACTION = mean(errorpercentage_TRANSACTION),
+              sd_errorpercentage_TRANSACTION = sd(errorpercentage_TRANSACTION) / (n^0.5),
+              mean_marketsize_error = mean(marketsize_error),
+              sd_marketsize_error = sd(marketsize_error) / (n^0.5),
+              mean_errors = mean(mean_error),
+              sd_mean_error = sd(mean_error) / (n^0.5)
+              ) )
+}
+```
+
+
+```{r}
+#If only price is used
+errors_simple <- linear_regress.cv(yvar_ = usables_data[usables_complete_cases_checker, "Content_THC"],
+                  xvars = cbind(data.frame(usables_data[usables_complete_cases_checker,
+                                                           (names(usables_data) %in% c("price_x"))]), data.frame(x1 = rep(0, nrow(usables_data[usables_complete_cases_checker,])))),
+                  n = 10)
+
+
+
+#Cross validate with model, no features engineered
+errors_main <- linear_regress.cv(yvar_ = usables_data[usables_complete_cases_checker, "Content_THC"],
+                  xvars = usables_data[usables_complete_cases_checker,
+                                                           !(names(usables_data) %in% c("inv_productname", "Content_THC"))],
+                  n = 10)
+
+
+
+
+#Cross validate with model, feature engineered
+errors_features <- linear_regress.cv(yvar_ = usables_data[usables_complete_cases_checker, "Content_THC"],
+                  xvars = cbind(usables_data[usables_complete_cases_checker,
+                                                           !(names(usables_data) %in% c("inv_productname", "Content_THC"))],
+                                              usables_features),
+                  n = 10)
+
+
+
+#Simple model, with features engineered
+#Derived this from lasso model variable selection. May need to write this up.
+errors_features_selected <- linear_regress.cv(yvar_ = usables_data[usables_complete_cases_checker, "Content_THC"],
+                  xvars = cbind(cbind(data.frame(usables_data[usables_complete_cases_checker,
+                                                           (names(usables_data) %in% c("price_x"))]), data.frame(x1 = rep(0, nrow(usables_data[usables_complete_cases_checker,])))),
+                                usables_features),
+                  n = 10)
+
+```
+
+```{r error table}
+errors_simple <- cbind(data.frame(errors_simple), 
+                       Model = "Simple Model")
+errors_main <- cbind(data.frame(errors_main), 
+                     Model = "Main Model with Income, Etc.")
+errors_features <- cbind(data.frame(errors_features), 
+                         Model = "Main Model, Features Engineered")
+errors_features_selected <- cbind(data.frame(errors_features_selected), 
+                                  Model = "Features Engineered, Variables Selected")
+
+errors <- errors_simple
+errors <- rbind(errors, errors_main)
+errors <- rbind(errors, errors_features)
+errors <- rbind(errors, errors_features_selected)
+
+kable(errors)
+```
+
+
+## Implementation of RAND Methodology
+
+```{r load script}
+#load script
+source("CMU_code_share_av.R")
+
+#command is "search_productname(arg)", where arg = inventory product name
+```
+
+```{r usables extract usable weights and calculate THC CBD}
+#Implement function
+#UW = "usable weight"
+UWextracted_usables <- search_productname(usables$inv_productname) #outputs in mg
+UWrecalc_usables <- cbind(usables, UWextracted_usables)
+
+UWrecalc_usables$sale_time <- as.numeric(as.POSIXct(as.character(UWrecalc_usables$sale_time)))
+
+#create a column
+UWrecalc_usables$UsableWGT_G_Extracted <- NA
+
+#draw just max if there is only a max value
+UWrecalc_usables[is.na(UWrecalc_usables$mg_text_max) == FALSE & is.na(UWrecalc_usables$mg_text_min),]$UsableWGT_G_Extracted <- UWrecalc_usables[is.na(UWrecalc_usables$mg_text_max) == FALSE & is.na(UWrecalc_usables$mg_text_min),
+                 ]$mg_text_max 
+#arbitrarily recalculate if there is a max and a min
+UWrecalc_usables[is.na(UWrecalc_usables$mg_text_min) == FALSE,]$UsableWGT_G_Extracted <- (UWrecalc_usables[is.na(UWrecalc_usables$mg_text_min) == FALSE,
+                 ]$mg_text_max + UWrecalc_usables[is.na(UWrecalc_usables$mg_text_min) == FALSE,
+                 ]$mg_text_min) / 2
+
+UWrecalc_usables$UsableWGT_G_Extracted <- UWrecalc_usables$UsableWGT_G_Extracted / 1000 #convert to grams
+
+##KEEP ABOVE CODE, BUT IN THIS CASE, DISCARD PREVIOUS OBSERVATIONS....... COMMENT ME OUT IF IT'S BETTER...
+UWrecalc_usables$UsableWGT_G_Extracted <- UWrecalc_usables$mg_text_max / 1000
+
+#calculate THC/CBD contents
+UWrecalc_usables$ExtractedContent_THC <- UWrecalc_usables$Potency_THC * UWrecalc_usables$UsableWGT_G_Extracted
+UWrecalc_usables$ExtractedContent_CBD <- UWrecalc_usables$Potency_CBD * UWrecalc_usables$UsableWGT_G_Extracted
+
+```
+
+```{r extract and partition}
+#extract columns
+UWrecalc_usables_data <- UWrecalc_usables[,
+                                names(UWrecalc_usables) %in% c("inv_productname",
+                                            "sale_time",
+                                            "weight",
+                                            "price_x",
+                                            "incomeindexlow",
+                                            "incomeindexhigh",
+                                            "Content_THC",
+                                            "ExtractedContent_THC")]
+
+###Feature engineering###
+pricetime <- UWrecalc_usables_data$sale_time - mean(UWrecalc_usables_data$sale_time, na.rm=TRUE) #normalize at 0
+pricetime <- pricetime * UWrecalc_usables_data$price_x #interact
+
+UWrecalc_usables_features <- data.frame(pricetime = pricetime)
+rm(pricetime)
+
+#partition by whether we can extract potency values
+UWrecalc_usables_data_train <- UWrecalc_usables_data[is.na(UWrecalc_usables_data$ExtractedContent_THC) == FALSE,]
+UWrecalc_usables_data_test <- UWrecalc_usables_data[is.na(UWrecalc_usables_data$ExtractedContent_THC),]
+
+#drop actual usables column in train
+UWrecalc_usables_data_train <- UWrecalc_usables_data_train[,!(names(UWrecalc_usables_data_train) %in% "Content_THC")]
+```
+
+
+```{r train and test model}
+#train
+#created new dataset to simplify code in lm()
+trainer <- cbind(UWrecalc_usables_data_train, UWrecalc_usables_features[is.na(UWrecalc_usables_data$ExtractedContent_THC) == FALSE,])
+colnames(trainer) <- c(names(UWrecalc_usables_data_train), "pricetime")
+
+usables.extractedUW.lm <- lm(ExtractedContent_THC ~ price_x, 
+                             data = trainer[,!(names(trainer) %in% "inv_productname")])
+# usables.extractedUW.lm <- lm(ExtractedContent_THC ~., 
+#                              data = trainer[,!(names(trainer) %in% "inv_productname")])
+
+summary(usables.extractedUW.lm)
+
+#predict
+tester <- cbind(UWrecalc_usables_data_test, UWrecalc_usables_features[is.na(UWrecalc_usables_data$ExtractedContent_THC) == TRUE,])
+colnames(tester) <- c(names(UWrecalc_usables_data_test), "pricetime")
+UWrecalc_usables_data_test$Prediction <- predict(usables.extractedUW.lm, 
+                                                 tester)
+#count # times model fails to implement
+table(is.na(UWrecalc_usables_data_test$Prediction)) # just 2 transactions
+
+#evaluate
+sum(UWrecalc_usables_data_test$Prediction, na.rm = TRUE)
+sum(UWrecalc_usables_data_test$Content_THC, na.rm = TRUE)
+
+##^^calculate internal statistics
+##to do: top code usables...
+##Also, lasso for with feature engineering...
+```
+
+
+# Extracts
+
+```{r edibles sql, eval=FALSE}
+===Retrieve key columns===
+SELECT
+#store_loc, #don't need this--this isn't where the product is sold
+thc,
+thca,
+cbd,
+cbda,
+inv_productname,
+transactionid, #maybe useful for basket analysis?
+sale_time,
+weight,
+usableweight,
+inventorytype,
+price_x,
+gram_price_x,
+invtype,
+inv_location #this information is where the product is sold
+
+FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+WHERE invtype == 'Marijuana Extract for Inhalation'
+==============================
+===Random sampling===
+SELECT *
+FROM [rand-systems:TEAM_WORKSPACE_USE_ME.AD_retailextracts]
+WHERE RAND() < 100000/17282451  #format: rough number of rows desired / total rows in table
+#this gets approximate random sample with scalable code
+==============================
+```
+
+
+# Edibles
+
+```{r, eval=FALSE}
+SELECT
+#store_loc, #don't need this--this isn't where the product is sold
+thc,
+thca,
+cbd,
+cbda,
+inv_productname,
+transactionid, #maybe useful for basket analysis?
+sale_time,
+weight,
+usableweight,
+inventorytype,
+price_x,
+gram_price_x,
+invtype,
+inv_location #this information is where the product is sold
+
+FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+WHERE ( invtype == 'Solid Marijuana Infused Edible'
+OR invtype == 'Liquid Marijuana Infused Edible' )
+AND sale_time > cast('2017-01-01 00:00:00.00 UTC' as timestamp
+
+
+==========================================
+
+SELECT (thc + (0.877 * thca)) AS Potency_THC, #http://www.canorml.org/RingTestOShaughnessys_Aut11.pdf
+#https://pubchem.ncbi.nlm.nih.gov/compound/cannabidiol
+#https://pubchem.ncbi.nlm.nih.gov/compound/Cannabidiolic_acid
+(cbd + (cbda *  (314.469 / 358.478))) AS Potency_CBD,
+inv_productname,
+transactionid,
+sale_time,
+weight,
+#usableweight #note: no useable weights here
+inventorytype, #22 = solid; 23 = liquid,
+price_x,
+#gram_price_x, #no usable weights here,
+#invtype #note: abbreviated in inventorytype
+inv_location
+
+FROM [rand-systems:TEAM_WORKSPACE_USE_ME.AD_edibles2017]
+
+=======Random Sampling
+SELECT *
+FROM [rand-systems:TEAM_WORKSPACE_USE_ME.AD_edibles2017_columnsabbreviated]
+WHERE RAND() < 100000/4972181  #format: rough number of rows desired / total rows in table
+#this gets approximate random sample with scalable code
+```
+
+
+
+```{r load edibles data}
+edibles <- read.csv("AD_edibles2017_columnsabbreviated100k.csv")
+
+```
+
+```{r get usable weights and calculate thc values}
+#run UW extraction function
+edibles_ExtractionUsableWeight <- search_productname(edibles$inv_productname)
+
+edibles <- cbind(edibles, edibles_ExtractionUsableWeight$mg_text_max)
+colnames(edibles) <- c(colnames(edibles)[1:(ncol(edibles) - 1)], "UsableWeight")
+edibles$UsableWeight <- edibles$UsableWeight / 1000
+
+edibles$Content_THC <- edibles$UsableWeight * edibles$Potency_THC
+edibles$Content_CBD <- edibles$UsableWeight * edibles$Potency_CBD
+```
+
+
+
+```{r edibles engineer features}
+edibles$sale_time <- as.numeric(as.POSIXct(as.character(edibles$sale_time)))
+edibles$pricetime <- (edibles$sale_time - mean(edibles$sale_time)) * edibles$price_x
+```
+
+```{r topcoding}
+#need to make this consistent in above procedures??
+edibles$Potency_THC <- ifelse(edibles$Potency_THC > 100, 100, edibles$Potency_THC)
+```
+
+
+```{r partition out CBD products}
+
+#remove cbd products
+edibles_CBD <- edibles[edibles$Potency_CBD > edibles$Potency_THC,]
+edibles <- edibles[edibles$Potency_CBD <= edibles$Potency_THC,]
+
+#remove glitched blank rows
+edibles <- edibles[is.na(edibles$Potency_THC) == FALSE & is.na(edibles$sale_time) == FALSE,]
+edibles_CBD <- edibles_CBD[is.na(edibles_CBD$Potency_THC) == FALSE & is.na(edibles_CBD$sale_time) == FALSE,]
+```
+
+```{r edibles partition data liquid solid}
+#partition
+edibles_liq <- edibles[edibles$inventorytype == 23,]
+edibles_sol <- edibles[edibles$inventorytype == 22,]
+```
+
+
+## Visualization
+
+```{r}
+ggplot(edibles, aes(x = price_x, y = Content_THC)) + 
+  geom_point(alpha = 0.1) +
+  facet_grid(.~ inventorytype) +
+  coord_cartesian(y = c(0, 20), x = c(0, 300))
+```
+
+## Text Analytics Pre-Processing Function
+
+```{r }
+#key dataframes: edibles_liq, edibles_sol
+library(tm)
+library(qdap)
+
+#Converts product name vector to docterm matrix (TF-IDF normalization)
+names_DocTermMatrix <- function (productnames1){
+  productnames <- gsub("([0-9])", "\\1 ", as.character(productnames1)) #add space betw numbers
+  productnames <- gsub("[][!#$%()*,.:;<=>@^_|~.{}''']", " ", productnames) #space btw punctuation
+  productnames <- removeNumbers(productnames)
+  productnames <- tolower(productnames)
+  productnames <- replace_symbol(productnames)
+  productnames <- removePunctuation(productnames)
+  
+  productnames <- removeWords(productnames, c("oz", "mg")) #remove stopwords
+  
+  productnames <- stripWhitespace(productnames) # do this last as things are deleted
+  productnames <- trimws(productnames, which = c("both", "left", "right")) #trim ends
+  
+  #productnames_DTM <- DocumentTermMatrix(Corpus(VectorSource(productnames)))
+  
+  #calculate tf idf matrix
+  productnames_DTM <- DocumentTermMatrix(Corpus(VectorSource(productnames)), 
+                                              control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+  
+  productnames_DTM <- as.data.frame(as.matrix(productnames_DTM))
+  return(productnames_DTM)
+}
+
+
+
+```
+
+
+
+## Liquid Edibles
+
+```{r}
+#train model
+edibles_liq_train <- edibles_liq[is.na(edibles_liq$UsableWeight) == FALSE,]
+edibles_liq.lm <- lm(Content_THC ~ price_x + pricetime, edibles_liq_train)
+#estimate
+edibles_liq_impute <- edibles_liq[is.na(edibles_liq$UsableWeight) == TRUE,]
+edibles_liq_impute$Content_THC <- predict(edibles_liq.lm, edibles_liq_impute)
+
+summary(edibles_liq.lm)
+```
+
+```{r}
+edibles_liq_summary <- data.frame(type = as.character(), value = as.numeric(), sd = as.numeric())
+
+edibles_liq_summary <- rbind(edibles_liq_summary, 
+                             data.frame(type = "Training", value = sum(edibles_liq_train$Content_THC), sd = sd(edibles_liq_train$Content_THC) / (nrow(edibles_liq_train) ^ 0.5)))
+
+edibles_liq_summary <- rbind(edibles_liq_summary, 
+                             data.frame(type = "Imputed", value = sum(edibles_liq_impute$Content_THC), sd = sd(edibles_liq_impute$Content_THC) / (nrow(edibles_liq_impute) ^ 0.5)))
+
+kable(cbind(edibles_liq_summary[,1], (edibles_liq_summary[,2:3])* 4972181 / 100000))
+```
+
+```{r cross-validate liquid edibles}
+#edibles_liq_train <- edibles_liq[is.na(edibles_liq$UsableWeight) == FALSE,]
+n <- 5
+edibles_liq_train$PartitionID <- sample(1:n, nrow(edibles_liq_train), replace=TRUE)
+
+PredictedSum <- c()
+Sample_Based_PredictionSum <- c()
+ActualSum <- c()
+MeanPredError <- c()
+MeanSampleError <- c()
+
+for (i in 1:n){
+  #partition
+  training <- edibles_liq_train[edibles_liq_train$PartitionID != i,]
+  test <- edibles_liq_train[edibles_liq_train$PartitionID == i,]
+  #train and predict
+  trained.lm <- lm(Content_THC ~ price_x + pricetime, training)
+  test$Predictions <- predict(trained.lm, test)
+  #get summary statistics
+  PredictedSum <- c(PredictedSum, sum(test$Predictions))
+  Sample_Based_PredictionSum <- c(Sample_Based_PredictionSum,
+                                 (sum(training$Content_THC) / nrow(training)) * nrow(test))
+  ActualSum <- c(ActualSum, sum(test$Content_THC))
+  
+  MeanPredError <- c(MeanPredError, mean(abs(test$Predictions - test$Content_THC)))
+  MeanSampleError <- c(MeanSampleError, 
+                       mean(abs(rep(mean(test$Content_THC),
+                                    nrow(test)) - test$Content_THC)))
+  
+}
+##MARKET SIZE ESTIMATES--IRRELEVANT??
+PredictedSum
+Sample_Based_PredictionSum
+ActualSum
+
+##INDIVIDUALIZED ERRORS
+MeanPredError
+MeanSampleError
+
+mean(abs(PredictedSum - ActualSum)) #market size error--irrelevant? (prediction)
+mean(abs(Sample_Based_PredictionSum - ActualSum)) #market size error--irrelevant? (sample-based)
+
+######INDIVIDUALIZED PREDICTIONS######
+#prediction-based, regression
+mean(MeanPredError)
+sd(MeanPredError) / (length(MeanPredError) ^ 0.5)
+#sample-based, random
+mean(MeanSampleError)
+sd(MeanSampleError) / (length(MeanSampleError) ^ 0.5)
+```
+
+### Name-Based Decision Tree
+
+```{r, cache=TRUE}
+
+##make a function with this??
+edibles_liqTFIDF <- names_DocTermMatrix(edibles_liq$inv_productname)
+
+##COMPUTE PRINCIPAL COMPONENTS TO REDUCE COMPUTATION TIME
+edibles_liqTFIDF.PCA <- prcomp(edibles_liqTFIDF) #don't scale--keep IDF weightings...
+edibles_liqTFIDF <- edibles_liqTFIDF.PCA$x[,1:294] #move back into matrix..., grab first 294 pcs
+
+
+edibles_liqX <- edibles_liq[, !(names(edibles_liq) %in% c("Potency_THC", #drop unnecessary varnames
+                                             "Potency_CBD", 
+                                             "UsableWeight",
+                                             "inv_productname",
+                                             "transactionid",
+                                             "inventorytype",
+                                             "inv_location", #may need this for joins?
+                                             "Content_CBD"))]
+edibles_liq_textdata <- cbind(edibles_liqX,
+                                   edibles_liqTFIDF)
+
+edibles_liq_textdataTRAIN <- edibles_liq_textdata[is.na(edibles_liq_textdata$Content_THC)==FALSE , ]
+
+edibles_liq_textdataIMPUTE <- edibles_liq_textdata[is.na(edibles_liq_textdata$Content_THC)==TRUE , ]
+                                  
+
+n <- 5
+edibles_liq_textdataTRAIN$PartitionID <- sample(1:n, 
+                                                nrow(edibles_liq_textdataTRAIN), replace=TRUE)
+
+RandomSampleEstimates <- c()
+PredictedEstimates <- c()
+Actuals <- c()
+
+MeanPredError <- c()
+MeanSampleError <- c()
+
+for (i in 1:n){
+  training <- edibles_liq_textdataTRAIN[edibles_liq_textdataTRAIN$PartitionID != i,]
+  test <- edibles_liq_textdataTRAIN[edibles_liq_textdataTRAIN$PartitionID == i,]
+  
+  RF <- randomForest(Content_THC ~.,
+                     data = training[,names(training) != "PartitionID"] ,
+                     ntree = 200
+                     ) #train error drastically decreases by ntree 100, and more so at ntree 250
+  test$Predictions <- predict(RF, test)
+  
+  RandomSampleEstimates <- c(RandomSampleEstimates, mean(training$Content_THC) * nrow(test))
+  PredictedEstimates <- c(PredictedEstimates, sum(test$Predictions))
+  Actuals <- c(Actuals, sum(test$Content_THC))
+  
+    MeanPredError <- c(MeanPredError, mean(abs(test$Predictions - test$Content_THC)))
+    MeanSampleError <- c(MeanSampleError, 
+                       mean(abs(rep(mean(test$Content_THC),
+                                    nrow(test)) - test$Content_THC)))
+}
+#market size estimates--irrelevant??
+RandomSampleEstimates
+PredictedEstimates
+Actuals
+
+##INDIVIDUALIZED ERRORS
+MeanPredError
+MeanSampleError
+
+#market size errors--irrelevant?
+mean(abs(PredictedEstimates - Actuals))
+mean(abs(RandomSampleEstimates - Actuals))
+
+######INDIVIDUALIZED PREDICTIONS######
+#prediction-based, RF
+mean(MeanPredError)
+sd(MeanPredError) / (length(MeanPredError) ^ 0.5)
+#sample-based, random
+mean(MeanSampleError)
+sd(MeanSampleError) / (length(MeanSampleError) ^ 0.5)
+```
+
+```{r liquid edibles names based prediction, cache=TRUE}
+RF <- randomForest(Content_THC ~.,
+                     data = edibles_liq_textdataTRAIN[,
+                                                      names(edibles_liq_textdataTRAIN) != "PartitionID"] ,
+                     ntree = 200
+                     )
+
+RF
+
+edibles_liq_textdataIMPUTE$Prediction <- predict(RF, edibles_liq_textdataIMPUTE)
+```
+
+
+```{r totals imputed and training final prediction edible liquids}
+sum(edibles_liq_textdataTRAIN$Content_THC)
+mean(edibles_liq_textdataTRAIN$Content_THC)
+
+sum(edibles_liq_textdataIMPUTE$Prediction)
+mean(edibles_liq_textdataIMPUTE$Prediction)
+```
+
+
+## Solid Edibles
+
+```{r}
+#train model
+edibles_sol_train <- edibles_sol[is.na(edibles_sol$UsableWeight) == FALSE,]
+edibles_sol.lm <- lm(Content_THC ~ price_x + pricetime, edibles_sol_train)
+#estimate
+edibles_sol_impute <- edibles_sol[is.na(edibles_sol$UsableWeight) == TRUE,]
+edibles_sol_impute$Content_THC <- predict(edibles_sol.lm, edibles_sol_impute)
+
+
+summary(edibles_sol.lm)
+```
+
+```{r}
+edibles_sol_summary <- data.frame(type = as.character(), value = as.numeric(), sd = as.numeric())
+
+edibles_sol_summary <- rbind(edibles_sol_summary, 
+                             data.frame(type = "Training", value = sum(edibles_sol_train$Content_THC), sd = sd(edibles_sol_train$Content_THC) / (nrow(edibles_sol_train) ^ 0.5)))
+
+edibles_sol_summary <- rbind(edibles_sol_summary, 
+                             data.frame(type = "Imputed", value = sum(edibles_sol_impute$Content_THC), sd = sd(edibles_sol_impute$Content_THC) / (nrow(edibles_sol_impute) ^ 0.5)))
+
+kable(cbind(edibles_sol_summary[,1], (edibles_sol_summary[,2:3])* 4972181 / 100000))
+```
+
+```{r}
+n <- 10
+edibles_sol_train$PartitionID <- sample(1:n, nrow(edibles_sol_train), replace=TRUE)
+
+PredictedSum <- c()
+Sample_Based_PredictionSum <- c()
+ActualSum <- c()
+
+MeanPredError <- c()
+MeanSampleError <- c()
+
+for (i in 1:n){
+  #partition
+  training <- edibles_sol_train[edibles_sol_train$PartitionID != i,]
+  test <- edibles_sol_train[edibles_sol_train$PartitionID == i,]
+  #train and predict
+  trained.lm <- lm(Content_THC ~ price_x + pricetime, training)
+  test$Predictions <- predict(trained.lm, test)
+  #get summary statistics
+  PredictedSum <- c(PredictedSum, sum(test$Predictions))
+  Sample_Based_PredictionSum <- c(Sample_Based_PredictionSum,
+                                 (sum(training$Content_THC) / nrow(training)) * nrow(test))
+  ActualSum <- c(ActualSum, sum(test$Content_THC))
+  
+  MeanPredError <- c(MeanPredError, mean(abs(test$Predictions - test$Content_THC)))
+  MeanSampleError <- c(MeanSampleError, 
+                       mean(abs(rep(mean(test$Content_THC),
+                                    nrow(test)) - test$Content_THC)))
+  
+}
+#Market Size Errors--irrelevant...
+PredictedSum
+Sample_Based_PredictionSum
+ActualSum
+
+#Individualized Errors
+MeanPredError
+MeanSampleError
+
+mean(abs(PredictedSum - ActualSum))
+mean(abs(Sample_Based_PredictionSum - ActualSum))
+
+######INDIVIDUALIZED PREDICTIONS######
+#prediction-based, RF
+mean(MeanPredError)
+sd(MeanPredError) / (length(MeanPredError) ^ 0.5)
+#sample-based, random
+mean(MeanSampleError)
+sd(MeanSampleError) / (length(MeanSampleError) ^ 0.5)
+
+```
+
+## Name Based Predictions
+
+```{r}
+##SAMPLE OUT EDIBLES SOLID DUE TO SIZE
+edibles_solS <- edibles_sol[sample(1:nrow(edibles_sol), 
+                                   20000, replace=TRUE),]
+```
+
+```{r, cache=TRUE}
+##make a function with this??
+edibles_solSTFIDF <- names_DocTermMatrix(edibles_solS$inv_productname)
+
+##COMPUTE PRINCIPAL COMPONENTS TO REDUCE COMPUTATION TIME
+edibles_solSTFIDF.PCA <- prcomp(edibles_solSTFIDF) #don't scale--keep IDF weightings...
+edibles_solSTFIDF <- edibles_solSTFIDF.PCA$x[,1:610] #move back into matrix..., grab first 715 pcs--note, many more pcs here, veven with this sampling
+
+
+edibles_solSX <- edibles_solS[, !(names(edibles_solS) %in% c("Potency_THC", #drop unnecessary varnames
+                                             "Potency_CBD", 
+                                             "UsableWeight",
+                                             "inv_productname",
+                                             "transactionid",
+                                             "inventorytype",
+                                             "inv_location", #may need this for joins?
+                                             "Content_CBD"))]
+edibles_solS_textdata <- cbind(edibles_solSX,
+                                   edibles_solSTFIDF)
+
+edibles_solS_textdataTRAIN <- edibles_solS_textdata[is.na(edibles_solS_textdata$Content_THC)==FALSE , ]
+
+edibles_solS_textdataIMPUTE <- edibles_solS_textdata[is.na(edibles_solS_textdata$Content_THC)==TRUE , ]
+                                  
+
+n <- 5
+edibles_solS_textdataTRAIN$PartitionID <- sample(1:n, 
+                                                nrow(edibles_solS_textdataTRAIN), replace=TRUE)
+
+RandomSampleEstimates <- c()
+PredictedEstimates <- c()
+Actuals <- c()
+
+MeanPredError <- c()
+MeanSampleError <- c()
+
+for (i in 1:n){
+  training <- edibles_solS_textdataTRAIN[edibles_solS_textdataTRAIN$PartitionID != i,]
+  test <- edibles_solS_textdataTRAIN[edibles_solS_textdataTRAIN$PartitionID == i,]
+  
+  RF <- randomForest(Content_THC ~.,
+                     data = training[,names(training) != "PartitionID"] ,
+                     ntree = 150
+                     ) #train error drastically decreases by ntree 100, and more so at ntree 250
+  test$Predictions <- predict(RF, test)
+  
+  RandomSampleEstimates <- c(RandomSampleEstimates, mean(training$Content_THC) * nrow(test))
+  PredictedEstimates <- c(PredictedEstimates, sum(test$Predictions))
+  Actuals <- c(Actuals, sum(test$Content_THC))
+  
+    MeanPredError <- c(MeanPredError, mean(abs(test$Predictions - test$Content_THC)))
+    MeanSampleError <- c(MeanSampleError, 
+                       mean(abs(rep(mean(test$Content_THC),
+                                    nrow(test)) - test$Content_THC)))
+}
+#market size estimates--irrelevant??
+RandomSampleEstimates
+PredictedEstimates
+Actuals
+
+##INDIVIDUALIZED ERRORS
+MeanPredError
+MeanSampleError
+
+#market size errors--irrelevant?
+mean(abs(PredictedEstimates - Actuals))
+mean(abs(RandomSampleEstimates - Actuals))
+
+######INDIVIDUALIZED PREDICTIONS######
+#prediction-based, RF
+mean(MeanPredError)
+sd(MeanPredError) / (length(MeanPredError) ^ 0.5)
+#sample-based, random
+mean(MeanSampleError)
+sd(MeanSampleError) / (length(MeanSampleError) ^ 0.5)
+```
+
+```{r solid edibles names based prediction, cache=TRUE}
+RF <- randomForest(Content_THC ~.,
+                     data = edibles_solS_textdataTRAIN[,
+                                                      names(edibles_solS_textdataTRAIN) != "PartitionID"] ,
+                     ntree = 150
+                     )
+
+RF
+
+edibles_solS_textdataIMPUTE$Prediction <- predict(RF, edibles_solS_textdataIMPUTE)
+```
+
+
+```{r totals imputed and training final prediction edible solids}
+sum(edibles_solS_textdataTRAIN$Content_THC)
+mean(edibles_solS_textdataTRAIN$Content_THC)
+
+sum(edibles_solS_textdataIMPUTE$Prediction)
+mean(edibles_solS_textdataIMPUTE$Prediction)
+```
+
+
+## Edible CBD Products
+
+**TO DO: This is a little more complicated here. Need to estimate usable weight, NOT CBD/THC content directly. THEN use this to get THC content.**
+
+### Liquids
+
+```{r}
+edibles_cbd_liq <- edibles_CBD[edibles_CBD$inventorytype == 23,]
+
+#train model
+edibles_cbd_liq_train <- edibles_cbd_liq[is.na(edibles_cbd_liq$UsableWeight) == FALSE,]
+edibles_cbd_liq.lm <- lm(Content_THC ~ price_x + pricetime, edibles_cbd_liq_train)
+#estimate
+edibles_cbd_liq_impute <- edibles_cbd_liq[is.na(edibles_cbd_liq$UsableWeight) == TRUE,]
+edibles_cbd_liq_impute$Content_THC <- predict(edibles_cbd_liq.lm, edibles_cbd_liq_impute)
+
+summary(edibles_cbd_liq.lm)
+```
+
+```{r}
+edibles_cbd_liq_summary <- data.frame(type = as.character(), value = as.numeric(), sd = as.numeric())
+
+edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, 
+                             data.frame(type = "Training", value = sum(edibles_cbd_liq_train$Content_THC), sd = sd(edibles_cbd_liq_train$Content_THC) / (nrow(edibles_cbd_liq_train) ^ 0.5)))
+
+edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, 
+                             data.frame(type = "Imputed", value = sum(edibles_cbd_liq_impute$Content_THC), sd = sd(edibles_cbd_liq_impute$Content_THC) / (nrow(edibles_cbd_liq_impute) ^ 0.5)))
+
+kable(cbind(edibles_cbd_liq_summary[,1], (edibles_cbd_liq_summary[,2:3])* 4972181 / 100000))
+```
+
+### Solids
+
+```{r}
+edibles_cbd_sol <- edibles_CBD[edibles_CBD$inventorytype == 22,]
+
+#train model
+edibles_cbd_sol_train <- edibles_cbd_sol[is.na(edibles_cbd_sol$UsableWeight) == FALSE,]
+edibles_cbd_sol.lm <- lm(Content_THC ~ price_x + pricetime, edibles_cbd_sol_train)
+#estimate
+edibles_cbd_sol_impute <- edibles_cbd_sol[is.na(edibles_cbd_sol$UsableWeight) == TRUE,]
+edibles_cbd_sol_impute$Content_THC <- predict(edibles_cbd_sol.lm, edibles_cbd_sol_impute)
+
+
+summary(edibles_cbd_sol.lm )
+```
+
+```{r}
+edibles_cbd_sol_summary <- data.frame(type = as.character(), value = as.numeric(), sd = as.numeric())
+
+edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, 
+                             data.frame(type = "Training", value = sum(edibles_cbd_sol_train$Content_THC), sd = sd(edibles_cbd_sol_train$Content_THC) / (nrow(edibles_cbd_sol_train) ^ 0.5)))
+
+edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, 
+                             data.frame(type = "Imputed", value = sum(edibles_cbd_sol_impute$Content_THC), sd = sd(edibles_cbd_sol_impute$Content_THC) / (nrow(edibles_cbd_sol_impute) ^ 0.5)))
+
+kable(cbind(edibles_cbd_sol_summary[,1], (edibles_cbd_sol_summary[,2:3])* 4972181 / 100000))
+
+```

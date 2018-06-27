@@ -1,0 +1,29 @@
+SELECT inventoryid) as inventoryid, sale_time as sale_TIME
+FROM [full_WA_data.mgt_2016_time],[full_WA_data.mgt_2017_p1_time],[full_WA_data.mgt_2017_p2_time]
+
+SELECT inventoryid as inventoryid, inventorytype as inventorytype, usableweight as usableweight, sale_price as sale_price
+FROM [full_WA_data.mgt_2016_large],[full_WA_data.mgt_2017_p1_large],[full_WA_data.mgt_2017_p2_large]
+
+SELECT l.inventoryid as inventoryid,
+l.inventorytype as inventorytype, 
+l.usableweight as usableweight, 
+l.sale_price as sale_price,
+t.sale_time as sale_time
+FROM [full_WA_data.mgt_all_large] l
+JOIN [full_WA_data.mgt_all_time] t on (t.inventoryid = l.inventoryid)
+
+
+
+SELECT *, IF(year == 2016 && month == 7 ,1,0) +
+IF(year == 2016 && month == 8,1,0) +
+IF(year == 2016 && month == 9,1,0) +
+IF(year == 2016 && month == 10,1,0) +
+IF(year == 2016 && month == 11,1,0) +
+IF(year == 2016 && month == 12, 1,0) +
+IF(year == 2017 && month == 1, 1,0) +
+IF(year == 2017 && month == 2, 1,0) +
+IF(year == 2017 && month == 3, 1,0) +
+IF(year == 2017 && month == 4, 1,0) +
+IF(year == 2017 && month == 5, 1,0) +
+IF(year == 2017 && month == 6, 1,0) as ISSDP
+FROM [full_WA_data__proper.Retail_ALL] 

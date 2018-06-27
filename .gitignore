@@ -1,0 +1,11 @@
+*.tmp
+*.ppt
+*.pptx
+*.DS_Store
+*.doc
+*.docx
+parentFolderForCMU/*
+*.pdf
+*.xls
+*.xlsx
+output/*
