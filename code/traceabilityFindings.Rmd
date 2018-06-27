@@ -1,0 +1,174 @@
+---
+title: "Traceability-Based Findings"
+author: "Steven Davenport"
+date: "`r format(Sys.time(), '%B %d, %Y (%H:%M)')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(tidyverse)
+```
+
+```{r, echo=FALSE}
+make_date <- function(yyyy, m, quarter=F) {
+  # we need this for negative substring indexing
+  require(stringr)
+  # year is 4 digits; month is either 1 or 2 digits.
+  # Correct month by prefixing 0, getting all but last digit
+  month <- str_sub(paste0(0, m), -2) 
+  
+  as.Date(paste0(yyyy, "-", month, "-01"))
+}
+```
+
+## Outline
+
+This document will consolidate findings related to the WA traceability data. We have been tasked to pull the following parameters/insights:
+
++ Producer-Level (i.e. Farm-Gate / Primary Products)
+  + Production: Gross weight and THC Content **Kee Won**
+    + Flower. **Dry or wet? What tables? Columns? Warnings?**
+    + Other Plant Material (AKA "Shake and trim"). 
+    + how do we define these? Are they wholesale or retail?
+  + Revenue
+    + Total revenue by licensee. (Easy.) TODO: build this query.
+  + Waste and Discarded Material **Kee Won**
+    + What units do we need to look at here? Tables? Harvest events?
++ Processor-Level (including Producer-Processor) **Kee Won**
+  + Conversion Ratios (grams-to-grams / grams-to-units)
+    + Flower to concentrate (intermediate or final products)
+    + Other Plant Material to concentrate (intermediate or final products)
+  + Production: Gross weight/unit-count of intermediate products **Kee Won**
+    + E.g., BHO
+    + Not included in project description, but may be helpful.
++ Retail-Level 
+  + Sales volume by retail product type (Units, $):
+    + Usable Marijuana; Marijuana Mix Infused; Marijuna Mix Package; etc.
+  + Revenue (net of tax (so without excise tax?))
+  + THC Content and trends
+    + Usable Marijuana; Marijuana Mix Infused; Marijuna Mix Package; etc.
+
+## Questions to answer RE approach
+
+**Kee Won**
+
++ What table do we use to calculate revenue received for non-retail products? We want to use this to query producer- and processor- revenues. 
++ What table do we use to find intermediate product conversion ratios?
++ What table do we use to find amounts/ratios of discarded material?
+
+## Findings
+
+### Producer revenues
+
+```{r}
+# GoogleQuery: ?????
+
+# Aggregate revenues for all producers.
+
+```
+
+### Retail Sales
+```{r}
+# GoogleQuery: RetailUSDxType
+retailUSDxType <- read_csv("../gqoutput/results-20180627-174927.csv") %>%
+  mutate(date=make_date(YEAR, MONTH)) %>%
+  # Convert to $1000s
+  mutate(price_x = price_x / 1e3) %>%
+  filter(
+    # remove NA
+    !is.na(invtype),
+    # remove non-retail products in here for no reason
+    !invtype%in%c("Clone", "Mature Plant"),
+    # Remove the partial month of October 2017
+    date <= "2017-10-01")
+```
+
+#### Sales Volume (Dollars)
+
+```{r, echo=FALSE}
+# Chart
+retailUSDxType %>%
+  ggplot(aes(x=date, y=price_x, color=invtype)) + geom_line() +
+  labs(title="Gross Retail Sales by Inventory Type",
+       y="$1000, Post-Excise",
+       x="") +
+  theme_minimal() +
+  scale_x_date(date_labels = "%b '%y", date_breaks="6 months") +
+  scale_y_continuous(labels=scales::dollar_format())
+
+
+# Table
+retailUSDxType %>%
+  select(invtype, date, price_x) %>%
+  spread(invtype, price_x) %>%
+  knitr::kable(caption='Post-Excise Tax Sales By Inventory Type ($1k)', digits=0)
+
+```
+
+#### Sales Volume (Units)
+
+```{r, echo=FALSE}
+# TODO: Update query for proper unit/item-transaction definition
+# Chart
+retailUSDxType %>%
+  ggplot(aes(x=date, y=itemtransactions, color=invtype)) + geom_line() +
+  labs(title="Retail Item-Transactions by Inventory Type",
+       y="Item-transactions (retail data rows)",
+       x="") +
+  theme_minimal() +
+  scale_x_date(date_labels = "%b '%y", date_breaks="6 months")
+
+
+# Table
+retailUSDxType %>%
+  select(invtype, date, itemtransactions) %>%
+  spread(invtype, itemtransactions) %>%
+  knitr::kable(caption='Retail Item-Transactions By Inventory Type', digits=0)
+
+```
+
+
+#### THC Content
+
+```{r, echo=FALSE}
+# TODO: Update query for weighted averages
+# Chart
+retailUSDxType %>%
+  ggplot(aes(x=date, y=totalTHC, color=invtype)) + geom_line() +
+  labs(title="THC Content by Inventory Type",
+       y="THC Percent",
+       x="") +
+  theme_minimal() +
+  scale_x_date(date_labels = "%b '%y", date_breaks="6 months")
+
+
+# Table
+retailUSDxType %>%
+  select(invtype, date, totalTHC) %>%
+  spread(invtype, totalTHC) %>%
+  knitr::kable(caption='Mean THC Content By Inventory Type', digits=0)
+
+```
+
+#### CBD Content
+
+```{r, echo=FALSE}
+# TODO: Update query for weighted averages
+# Chart
+retailUSDxType %>%
+  ggplot(aes(x=date, y=totalCBD, color=invtype)) + geom_line() +
+  labs(title="CBD Content by Inventory Type",
+       y="CBD Percent",
+       x="") +
+  theme_minimal() +
+  scale_x_date(date_labels = "%b '%y", date_breaks="6 months")
+
+
+# Table
+retailUSDxType %>%
+  select(invtype, date, totalCBD) %>%
+  spread(invtype, totalCBD) %>%
+  knitr::kable(caption='Mean CBD Content By Inventory Type', digits=0)
+
+```

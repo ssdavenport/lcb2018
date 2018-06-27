@@ -9,3 +9,5 @@ parentFolderForCMU/*
 *.xls
 *.xlsx
 output/*
+.Rproj.user
+code/.Rproj.user/*
