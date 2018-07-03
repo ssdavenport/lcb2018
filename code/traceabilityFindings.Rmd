@@ -1,5 +1,5 @@
 ---
-title: "Traceability-Based Findings v 1.2"
+title: "Traceability-Based Findings v 1.3"
 author: "Steven Davenport"
 date: "`r format(Sys.time(), '%B %d, %Y (%H:%M)')`"
 output: html_document
@@ -11,26 +11,13 @@ Note: you can search-replace this document for "UNKNOWN" to find areas where we 
 
 **Progress to Date**
 
-v1.2 (June 30) added analysis of inventoryconversions table.
+v1.3 (June 30) restructured outline.  
+v1.2 (June 30) added analysis of inventoryconversions table.  
 v1.1 (June 29) clarified outline; incorporated comments from Kee Won RE methods. Was sent briefly to JPC.  
 v1.0 (June 27) provided outline; finished first draft of retail tables.
 
-**Immediate Next steps**
-
-+ Check if inventorytransfers can be used to merge price onto conversions.
-+ Prepare labresults (in googlequery) table to allow merge on inventorycombinations
-
-**Later To Do's**
-
-+ Improve/validate data cleaning for THC/CBD content for retail tables.
-+ Define resolution of retail product analysis. Shuold we consolidate the minor retail product types, e.g. capsule / suppository? Should we collapse similar products e.g. usable marijuana and marijuana mix package?
-+ Define resolution of the secondary processing analysis (likewise). Should rare intermediate products be collapsed or excluded?
-
-+ Enrich inventoryconversions table with **THC** (merge on inventoryid with lab table, for eligible products).
-+ Enrich inventoryconvetsions table with **wholesale-price** (merge on inventoryid with inventorytransactions; might require an extra step / recursive merge to link the inventoryID to the transactionID.)
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE,
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
                       # Graphic output
                       fig.width = 8, fig.align='center')
 library(tidyverse)
@@ -51,7 +38,7 @@ make_date <- function(yyyy, m, quarter=F) {
 }
 ```
 
-## Outline
+## Report Outline
 
 + Producer-Level (i.e. Farm-Gate / Primary Products)
   + **New dichotomy: 1) harvest, 2) lot?**
@@ -83,7 +70,7 @@ make_date <- function(yyyy, m, quarter=F) {
 + Licensee-level (table: inventorytransfers; requesting date field from LCB)
   + Revenues by License Class: Producer; P/P; Processor/ Retailer
 
-## Alternate Ooutline
+## Method Outline
 
 + Gross weight(g)/unit-counts
   + Available for all post-harvest supply chain (lotting, intermediate manufacturing, final-stage manufacturing); available over time, by licensee. (table: inventoryconversions)
@@ -93,19 +80,85 @@ make_date <- function(yyyy, m, quarter=F) {
   + Available over time, by licensee. (table: inventoryconversions).
 + Revenues
   + Available by licensee (table:inventorytransfers); available over time pending data request
-+ THC content
++ THC content ?
   + Available at retail, with trickiness for some products (table: dispensing)
   
+## To Dos
 
-## Methodology
+### Questions for Beau 
 
-### Production
++ Which "conversion ratios" do we care about? Flower to end product and OPM to end product?
++ Define resolution of retail product analysis. Shuold we consolidate the minor retail product types, e.g. capsule / suppository? Should we collapse similar products e.g. usable marijuana and marijuana mix package?
+
+### Data Prep/Cleaning
+
++ Check if inventorytransfers can be used to merge price onto conversions.
+  + I think not. because inventoryIDs will be different.
++ Prepare labresults (in googlequery) table to allow merge on inventoryconversions
+  + might not work because no inventoryparentid in inventoryconversions
++ Enrich inventoryconversions table with **THC** (merge on inventoryid with lab table, for eligible products).
++ Enrich inventoryconvetsions table with **wholesale-price** (merge on inventoryid with inventorytransactions; might require an extra step / recursive merge to link the inventoryID to the transactionID.)
++ Upload inventorycombinations table to new googlequery schema, converting fields to integer.
+
+#### Inventory Conversions
+
++ analytical/conceptual
+  + Determine analytical framework for this analysis. Calculate percentages respective to the input or the output type? Change-over-time analysis? What policy question can this answer? **JPC**?
+  + Generate a Lorenz curve / HHI for each parent/child product type? Perhaps separate for each year? This can let us analyze 
+  + Make Markov-type matrix of conversion pathways?
++ data/technical
+  + Re-run this with the full_WA_data_proper table?
+  + Verify: location/orgid refers to the manufacturer of the end product
+  + Since data is tagged only with creator license, but since it seems like this table captures all conversion pathways, many products are re-appearing in this table several times. So, attempt to 
+  create a new table that would sort of compute a recursive merge to analyze with to/from licensee data?
++ Parents
+  + check regulations to verify max parent lot sizes (5kg/10kg).
+  + consider data cleaning to remove lot sizes over certain #?
++ Children
+  + ?
++ Conversion ratios
+  + clean childusableweight when it an childwt is present. it seems like we sometimes but not always have to multiply wt * usablewt. Until we do that, the ratios will be wrong. 
+** KEE WON**
+
+#### Lab Results
+
++ Clean THC data (some are >100)
+
+
+### Misc
+
+**Later To Do's**
+
+
++ Define resolution of the secondary processing analysis (likewise). Should rare intermediate products be collapsed or excluded?
+
+## Load Tables from Google Query
+
+Here we will load top-level tables from GoogleQuery. They will be pulled upon from other sections of the report. Maybe also preview the raw tables (just a few rows).
+
+
+## Data Analysis
+
+Sections here are not provided according to the report outline. Rather they are provided in a sequence/grouping relating to how they are pulled from the data. Therefore the structure is a bit different.
+
+### Harvest Events (plantderivatives)
+
+table: plantderivatives.  
+
+if you harvest 10 plants at once, then you get **dwholeweight**. a proportion amount is assigned to each plant harvest -> **dweight**. So forget about dwholeweight.
+
+Almost all dry flower has inventoryid. Many plants have a wet weight but no dry weight, e.g. 250,000 plants in November 2017 due to end of traceability reporting.
+
+Join: plantderivatives::inventoryid - inventoryid::labresults_samples. Might not work.  
 
 table: plantderivatives. Contains harvest events. INVENTORYTYPE shows the type of material harvested. Plants are harvested into wet material (29), other plant material (9), and dry material (6). (WASTE???) DWEIGHT shows weight of the harvested material. DWHOLEWEIGHT means **UNKNOWN**.
 
+TODO: Diagnose.
 
-```{r, eval = F}
+make a destination table to hold results. limit_10. bigquery -> show options. allow large results.
+```{r, eval = F, include=F}
 # Queries
+
 
 # QUERY: Get weight of harvested material. This crashes Google Query.
 SELECT location, plantid, MIN(sessiontime) AS firstharvest,
@@ -141,71 +194,26 @@ GROUP BY location, inventorytype;
 # WHERE b.locationtype < 7;
 ```
 
+#### Wet Flower / OPM
 
-#### Gross weight
-
-Most tables can be joined by "location". KW can provide if given a time frame. Can share code.
-
-#### THC content is harder.  
-
-table: plantderivatives. Almost all dry flower has inventoryid. Many plants have a wet weight but no dry weight, e.g. 250,000 plants in November 2017 due to end of traceability reporting.
-
-Join: plantderivatives::inventoryid - inventoryid::labresults_samples. Might not work. TODO: Diagnose.
-
-### Revenue
-
-inventorytransfer::saleprice. 
-Validate/verify this. (5.3mil records)
-
-
-
-### Waste/Discards
+#### Waste
 
 table: "inventoryderivatives". Waste from harvesting.
-table: plantderivatives. (what stage is this?)
-Requires substantial data cleaning. Simple sums give crazy numbers.
-
-Maybe also more post-harvest waste in other inventorytables.
 inventory::waste record count: 989,387 
 sum(inventory::waste[inventorytype==26]) > 600mil kg (assuming units = gram)
 
-```{r}
-
-```
-
-### Processor-Level
-
-88.5% of dry weight (2016) came from producer/processors.
-Secondary (non-flower) product types are mysterious. LCB should advise.
-KW tried conversions, combinations, transfers
-
-#### Conversion ratios
-
-table: inventoryconversions.
-see KW matrix: beginning -> end product type.
-
-#### Waste/Discards (Processing/Inventory stage)
-
-Check other inventory tables.
+table: plantderivatives. (what stage is this?)
+Requires substantial data cleaning. Simple sums give crazy numbers.
+Maybe also more post-harvest waste in other inventorytables.
 
 
-#### Production volumes
-
-## Results
-
-### Raw Production
-#### Volume: Weight, Revenues
-#### Volume: kg THC?
-#### THC Content (%)
-#### Harvest-Stage Waste/Discards
-
-### Lotting
+### Lotting Events (inventorycombinations)
 
 The "inventorycombinations" table records the combination of individual raw production units to aggregate lots.  The input types to this process are Flower (inventorytype 6) and Other Plant Material (9). Lotted units include Flower lot (13), OPM lot (14), and marijuana mix (30).
 
-TODOS:
 
-+ Upload inventorycombinations table to new googlequery schema, converting fields to integer.
+
+
 
 #### Volume: counts
 
@@ -228,8 +236,7 @@ lots <- read_csv("../gqoutput/results-20180630-122340.csv") %>%
 knitr::kable(lots, caption="Lot counts by input-output type")
 ```
 
-
-### Inventory Conversions Table
+### Production Weight (inventoryconversions)
 
 The inventory conversions table records all conversions from one inventory type to another. This is key. This table is tagged with (allowing **time-series**) and **licensee-level** data (manufacturer of the child product), so complex analysis is possible. By merging on inventoryid, products downstream of testing can also have **THC** contents estimated. By merging with the table inventorytransfers, we ought to be able to compute all **revenue** figures too. Data span nearly the entire supply chain:
 
@@ -239,24 +246,6 @@ The inventory conversions table records all conversions from one inventory type 
 
 **Available information in this table**  
 date, location, parentweight (always grams?), childweight, childusableweight.
-
-TODOs:
-
-+ analytical/conceptual
-  + Determine analytical framework for this analysis. Calculate percentages respective to the input or the output type? Change-over-time analysis? What policy question can this answer? **JPC**?
-  + Generate a Lorenz curve / HHI for each parent/child product type? Perhaps separate for each year? This can let us analyze 
-  + Make Markov-type matrix of conversion pathways?
-+ data/technical
-  + Re-run this with the full_WA_data_proper table?
-  + Verify: location/orgid refers to the manufacturer of the end product
-  + Since data is tagged only with creator license, but since it seems like this table captures all conversion pathways, many products are re-appearing in this table several times. So, attempt to 
-  create a new table that would sort of compute a recursive merge to analyze with to/from licensee data?
-+ Parents
-  + check regulations to verify max parent lot sizes (5kg/10kg).
-  + consider data cleaning to remove lot sizes over certain #?
-+ Children
-  + 
-
 
 Example of the data in this table. (could also add date)
 
@@ -276,13 +265,21 @@ convDetailed <- read_csv("../gqoutput/results-20180630-133936.csv") %>%
   select(-inventorytype_parent, -inventorytype) %>%
   arrange(-nConversions)
 
-kable(convDetailed %>% head(20))
+kable(convDetailed %>% head(8))
 
 # TODO: Add licensee name, date
 write.csv(convDetailed, "../output/conversionsDetailed.csv")
+
 ```
 
-#### Parent analysis (input)
+
+
+This table gets the finest grain of stuff (licensee x parent-type x child-type). Should also add date once we know how to parse that.
+
+
+#### Table structure
+
+##### Parent analysis (input)
 
 Count number of conversions by parent; calculate gross totals (weight) of parent products. At this stage (considering the parent inventorytypes), I think weight = usableweight (grams). Note an average conversion-weight of almost 5000 (5kg?) for flower and 10,000 (10kg?) for OPM.
 
@@ -302,7 +299,7 @@ knitr::kable(convParent, digits=1)
 ```
 
 
-### Child analysis (output)
+##### Child analysis (output)
 
 
 ```{r}
@@ -322,7 +319,7 @@ convChild <- read_csv("../gqoutput/results-20180630-131250.csv") %>%
 knitr::kable(convChild, digits=0)
 ```
 
-### Path Analysis (parent->child)
+##### Path Analysis (parent->child)
 
 The table below produces a simple count of the number of records in each.
 
@@ -339,31 +336,88 @@ convPaths <- read_csv("../gqoutput/results-20180630-124915.csv") %>%
 convPaths %>% head(50) %>% kable(caption="Dominant Conversion Pathways")
 ```
 
-### Detailed Analysis
+#### Output Tables
 
-This table gets the finest grain of stuff (licensee x parent-type x child-type). Should also add date once we know how to parse that.
+##### Flower/OPM Lots
+
+We will triangulate this from various tables.
+
++ inventoryconversions - parent
++ inventoryconversions - child
++ inventorycombinations - lotting
+
+```{r}
+lots %>% 
+  group_by(NEWTYPE) %>%
+  summarise(numlots = sum(numlots)) %>%
+  kable(caption="Number of lots from inventorycombinations")
+```
+
+```{r}
+convDetailed %>%
+  filter(parent %in% c("Marijuana Mix", "Flower Lot", "Other Plant Material Lot")) %>%
+  group_by(parent) %>%
+  summarise(nConversions = sum(nConversions),
+           parentwt = sum(parentwt, na.rm=T)) %>%
+  arrange(-parentwt) %>%
+  kable(caption='number of lots used as parent in inventoryconversions')
+```
+
+```{r}
+convDetailed %>%
+  filter(child %in% c("Marijuana Mix", "Flower Lot", "Other Plant Material Lot")) %>%
+  group_by(child) %>%
+  summarise(nConversions = sum(nConversions),
+           childwt = sum(childwt, na.rm=T),
+           childusablewt = sum(childusablewt, na.rm=T)) %>%
+  arrange(-childwt) %>%
+  kable(caption='number of lots used as child in inventoryconversions')
+```
+
+##### Intermediate Products
+
+```{r}
+convDetailed %>%
+  filter(!parent %in% c("Marijuana Mix", "Flower Lot", "Other Plant Material Lot"),
+         !parent %in% c("Usable Marijuana")) %>%
+  group_by(parent) %>%
+  summarise(nConversions = sum(nConversions),
+           parentwt = sum(parentwt, na.rm=T)) %>%
+  arrange(-parentwt) %>%
+  kable(caption='inventoryconversion parents')
+```
+
+```{r}
+convDetailed %>%
+  filter(!child %in% c("Marijuana Mix", "Flower Lot", "Other Plant Material Lot"),
+         !child %in% c("Usable Marijuana")) %>%
+  group_by(child) %>%
+  summarise(nConversions = sum(nConversions),
+           childwt = sum(childwt, na.rm=T),
+           childusablewt = sum(childusablewt, na.rm=T)) %>%
+  arrange(-childwt) %>%
+  kable(caption='inventoryconversion children')
+```
 
 
-### Secondary Processing
-#### Volume: Weight, Units, Revenues
-#### Waste/Discards (Processing/Inventory stage)
 
-#### Conversion Ratios (grams-to-grams / grams-to-units)
+#### Lotting
+#### Intermediate Manufactures
+#### Final Product
 
-** KEE WON**
 
-This table is major.
 
-TODOs
 
-+ clean childusableweight when it an childwt is present. it seems like we sometimes but not always have to multiply wt * usablewt. Until we do that, the ratios will be wrong.
+### Conversion Ratios (inventoryconversions)
+
+This data needs substantial cleaning.
 
 ```{r}
 options(scipen=99)
 # TODO: clean childusableweight when it an childwt is present.
 ratiosRaw <- convDetailed %>%
   group_by(parent, child) %>%
-  summarise(conversions = n(),
+  summarise(conversions = sum(nConversions),
             ratiowt2wt = sum(parentwt, na.rm=T)/sum(childwt, na.rm=T),
             ratiowt2uwt = sum(parentwt, na.rm=T)/sum(childusablewt, na.rm=T),
             ttlparentwt = sum(parentwt, na.rm=T),
@@ -377,8 +431,6 @@ ratiosRaw <- convDetailed %>%
 kable(ratiosRaw)
 ```
 
-##### Flower to concentrate (intermediate or final products)
-##### Other Plant Material to concentrate (intermediate or final products)
 
 ### Retail Products
 
@@ -470,9 +522,7 @@ retailUSDxType %>%
 ```
 
 
-#### THC Content
-
-TODO: Modify query to clean THC data (some are >100)
+#### THC/CBD Content
 
 ```{r, echo=FALSE}
 # TODO: Update query for weighted averages
@@ -494,7 +544,6 @@ retailUSDxType %>%
 
 ```
 
-#### CBD Content
 
 ```{r, echo=FALSE}
 # TODO: Update query for weighted averages
@@ -517,9 +566,10 @@ retailUSDxType %>%
 ```
 
 ### Licensee Revenue Analysis
-(be careful conflating license type w services provided)
 
-#### Producer/Producer-Processor Revenues
+#### Producer/P&P/Processors
+
+This can be generated from inventorytransfers table. inventorytransfer::saleprice. Validate/verify this. (5.3mil records)
 
 
 ```{r}
@@ -529,5 +579,6 @@ retailUSDxType %>%
 
 ```
 
-#### Processor Revenues (not in proj desc)
-#### Store Revenues
+#### Stores
+
+This can be generated from the dispensing table.

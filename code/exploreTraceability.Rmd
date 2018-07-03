@@ -1,0 +1,130 @@
+---
+title: "Explore Traceability"
+author: "Steven Davenport"
+date: "7/2/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      # Graphic output
+                      fig.width = 8, fig.align='center')
+library(tidyverse)
+library(knitr)
+source("functions.r")
+```
+
+The inventoryconversions data is useful, but aggregations of it seem to produce total nonsense. This is likely due to some extreme outliers. Below we will use a method to find reasonable top-censor cutoffs. This will tabulate licensee-inventorytype maximums, take the quantile at a certain value, and then use these values to establish a top-censor value.
+
+```{r}
+CensorMaxQuantile <- .8
+CensorMaxQuantile
+```
+
+**In this iteration, the percentile thresshold is `r CensorMaxQuantile`**
+
+# inventoryconversions: find top-censor thresholds.
+
+## parentwt
+```{r invconv_parentwt}
+# QUERY:
+# -- Explore cutoff for top-censoring parent-/child-(usable)weight
+# -- Compare maximum values across licensees/ inventorytypes
+# 
+# SELECT location, inventorytype_parent,
+# max(parent_difference) as parentwt,
+# --max(childweight) as childwt,
+# --max(child_usableweight) as childuwt
+# FROM [rand-systems:full_WA_data.biotrackthc_inventoryconversions]
+# GROUP BY location, inventorytype_parent;
+parentwt <- read_csv("../gqoutput/results-20180702-184647.csv") %>%
+  mutate(invtype = getInvtype(inventorytype_parent),
+         parentwt = as.numeric(parentwt))
+
+# Let's take the 95th percentile of licensee-inventorytype parentwt maximums
+parentwtmax95 <- with(parentwt, 
+                      tapply(parentwt, 
+                             inventorytype_parent, 
+                             function(x) quantile(x, CensorMaxQuantile, na.rm=T)))  %>% 
+  round(-2)# rounded to nearest 10.
+
+ggplot(parentwt,
+      aes(x=parentwt)) + geom_histogram() + facet_wrap(~invtype, scales = 'free') +
+  labs(title="parentwt: Biggest value observed by licensee (dirty data)",
+       subtitle="Use this to inform choice of top-censoring value in dataset")
+```
+
+Below we show the 95th percentile of licensee-inventorytype parentwt maximums
+```{r}
+
+parentwtmax95 %>% data.frame %>%
+  `colnames<-`('value') %>%
+  mutate(invtype = getInvtype(names(parentwtmax95)),
+         invnum = names(parentwtmax95)) %>% 
+  arrange(-value) %>%
+  kable(caption="parentwt: Proposed Top-Censoring Values for Inventorytype")
+  
+```
+
+## childwt
+```{r invconv_childwt}
+# QUERY:
+# -- Explore cutoff for top-censoring parent-/child-(usable)weight
+# -- Compare maximum values across licensees/ inventorytypes
+# SELECT location, inventorytype,
+# max(childweight) as childwt,
+# --max(child_usableweight) as childuwt
+# FROM [rand-systems:full_WA_data.biotrackthc_inventoryconversions]
+# GROUP BY location, inventorytype;
+
+# Load the data
+childwt <- read_csv("../gqoutput/results-20180702-190735.csv") %>%
+  mutate(invtype = getInvtype(inventorytype),
+         childuwt = as.numeric(childuwt))
+
+# Let's take the 95th percentile of licensee-inventorytype parentwt maximums
+childwtmax95 <- with(childwt, 
+                      tapply(childwt, 
+                             inventorytype, 
+                             function(x) quantile(x, CensorMaxQuantile, na.rm=T)))  %>% 
+  round(-2)# rounded to nearest 10.
+
+ggplot(childwt,
+      aes(x=childwt)) + geom_histogram() + facet_wrap(~invtype, scales = 'free') +
+  labs(title="childwt: Biggest value observed by licensee (dirty data)",
+       subtitle="Use this to inform choice of top-censoring value in dataset")
+
+## Find 95th percentile of max
+
+childwtmax95 %>% data.frame %>%
+  `colnames<-`('value') %>%
+  mutate(invtype = getInvtype(names(childwtmax95)),
+         invnum = names(childwtmax95)) %>% 
+  arrange(-value) %>% 
+  kable(caption="childwt: Proposed Top-Censoring Values for Inventorytype")
+
+```
+
+### Child usableweight
+```{r}
+childuwtmax95 <- with(childwt, 
+                      tapply(childuwt, 
+                             inventorytype, 
+                             function(x) quantile(x, CensorMaxQuantile, na.rm=T)))  %>% 
+  round(-2)# rounded to nearest 10.
+
+
+ggplot(childwt,
+      aes(x=childuwt)) + geom_histogram() + facet_wrap(~invtype, scales = 'free') +
+  labs(title="childusablewt: Biggest value observed by licensee (dirty data)",
+       subtitle="Use this to inform choice of top-censoring value in dataset")
+
+## Find 95th percentile of max
+childuwtmax95 %>% data.frame %>%
+  `colnames<-`('value') %>%
+  mutate(invtype = getInvtype(names(childuwtmax95)),
+         invnum = names(childuwtmax95)) %>% 
+  arrange(-value) %>% 
+  kable(caption="childusablewt: Proposed Top-Censoring Values for Inventorytype")
+
+```
