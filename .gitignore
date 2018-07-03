@@ -11,3 +11,9 @@ parentFolderForCMU/*
 output/*
 .Rproj.user
 code/.Rproj.user/*
+*.html
+code/*/*
+data/*
+gqoutput/*
+"Icon\r"
+*"Icon\r"
