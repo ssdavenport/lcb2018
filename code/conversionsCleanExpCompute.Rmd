@@ -1,0 +1,276 @@
+---
+title: "conversionsCleanExploreCompute v 1.1"
+author: "Steven Davenport"
+date: "7/11/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse); library(data.table); library(dtplyr); library(knitr)
+conversions <- fread('../Kee Won/conversions.csv')
+source("functions.R")
+```
+
+
+## data clean/prep
+
+### narrow dataset w new variables
+
+Task: create a new var (if needed) for each metric in contention which you'll consider top-coding/exploring, i.e. parent_difference, (parent_start - parent_end), childweight, childusableweight. Note a few new columns:
+
++ "weightdiff2" = newweight-oldweight
++ "parentdiff2" = parentweight_start - parentweight_end
+
+```{r}
+# narrow dataframe only to candidate weight columns to needed columns
+conv <- conversions %>%
+  select(inventoryid, 
+         inventorytype_parent, inventorytype,
+         oldweight, newweight, difference, parentweight_start, parentweight_end, parent_difference, childweight, child_usableweight) %>%
+  mutate(weightdiff2 = newweight - oldweight,
+         parentdiff2 = parentweight_start - parentweight_end,
+         child_usableweight = as.numeric(child_usableweight),
+         parent_difference = as.numeric(parent_difference),
+         invtypeparent = getInvtype(inventorytype_parent),
+         invtypechild = getInvtype(inventorytype)
+         ) %>%
+  select(-newweight,
+         -oldweight,
+         -parentweight_start, 
+         -parentweight_end,
+         -inventorytype_parent,
+         -inventorytype)
+
+```
+
+## Make results tables
+
+### Compute modal values by pathway, metric -> table
+
+```{r}
+# make a "melted" (re-shaped) version for aggregations.
+convM <- (conv %>% 
+  gather(metric, value, difference:parentdiff2)) %>%
+  as.data.table()
+
+# Get modal value for each metric, by pathway
+modes <- 
+  convM[ ,tail(sort(table(value)), 1),
+   by=.(invtypeparent, invtypechild, metric)] %>%
+  rename(mode = "V1")
+
+modes %>%
+  spread(metric, mode) %>%
+  kable(caption="modal value by pathway, metric")
+```
+
+### Compute quantile by pathway.
+
+```{r}
+# Get 95th quantile for each metric, by pathway
+pathQuants <- 
+  convM[ ,quantile(value, .9, na.rm=T),
+   by=.(invtypeparent, invtypechild, metric)] %>%
+  rename(q90 = "V1")
+
+pathQuants %>%
+  spread(metric, q90) %>%
+  kable(caption="90th quantile by pathway, metric")
+
+
+```
+
+### Top-code / remove values above the quantile.
+
+```{r}
+# Make function to apply top-coding by pathway
+topCode <- function(invtypeparentX, invtypechildX, metricX, valueX) {
+  
+  topCodeValue <- pathQuants[invtypeparent == invtypeparentX &
+                               invtypechild == invtypechildX &
+                               metric == metricX] %>%
+    .$q90
+
+  # topCodeValue <- pathQuants$q90
+    
+  return(ifelse(valueX > topCodeValue, topCodeValue, valueX))
+  
+}
+```
+
+```{r}
+convMSmall <- (conv %>% 
+                 dplyr::sample_n(1e4) %>%
+  gather(metric, value, difference:parentdiff2)) %>%
+  as.data.table()
+
+
+# Apply top-coding function to random sample (for speed)
+convMTopCoded <-
+  convMSmall %>% 
+  rowwise() %>%
+  mutate(valueTopCoded=topCode(invtypeparent, invtypechild, metric, value))
+
+# Compute "pathway" variable
+convMTopCoded <- convMTopCoded %>%
+  as.data.table() %>%
+  mutate(pathway = paste0(invtypeparent, " -> ", invtypechild)) 
+
+# Find most common pathways
+topPathways <- 
+  convMTopCoded[ , .N, pathway] %>% 
+  arrange(-N) %>%
+  head(9) %>%
+  .$pathway
+
+# Filter data to most common pathways
+convMTopCodedCommon <- convMTopCoded[pathway %in% topPathways]
+
+```
+
+
+## Make Charts
+
+Scatter plots (w/ jitter/density for over-plotting); facet by each parent-child pathway, trading X/Y axes:
+
+```{r}
+# Review metrics; prep dataframes ready to plot diff combos
+unique(convMTopCodedCommon$metric)
+
+
+### CHILDREN
+# get child_usableweights
+childuw <- convMTopCodedCommon[metric=="child_usableweight"] %>%
+  select(-metric) %>%
+  rename(child_usableweight = valueTopCoded)
+
+childw <- convMTopCodedCommon[metric=="childweight"] %>%
+  select(-metric) %>%
+  rename(childweight = valueTopCoded)
+
+
+
+### PARENTS
+
+parentdiff <- convMTopCodedCommon[metric=="parent_difference"] %>%
+  select(-metric) %>%
+  rename(parent_difference = valueTopCoded)
+
+weightdiff2 <- convMTopCodedCommon[metric=="weightdiff2"] %>%
+  select(-metric) %>%
+  rename(weightdiff2 = valueTopCoded)
+
+parentdiff2 <- convMTopCodedCommon[metric=="parentdiff2"] %>%
+  select(-metric) %>%
+  rename(parentdiff2 = valueTopCoded)
+
+diff <- convMTopCodedCommon[metric=="difference"] %>%
+  select(-metric) %>%
+  rename(difference = valueTopCoded)
+
+```
+
+
+### Parent diff -> ...
+
+#### parent diff (x) v child_usableweight (y)
+```{r, fig.width=8, fig.height=8}
+left_join(childuw %>% select(inventoryid, child_usableweight), 
+          parentdiff, 
+          by="inventoryid") %>%
+  ggplot(aes(x=parent_difference, y=child_usableweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="parent diff (x) v child_usableweight (y)")
+```
+
+#### parent diff (x) v childweight (y)
+
+```{r, fig.width=8, fig.height=8}
+left_join(childw %>% select(inventoryid, childweight), 
+          parentdiff, 
+          by="inventoryid") %>%
+  ggplot(aes(x=parent_difference, y=childweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="parent diff (x) v childeweight (y)")
+```
+
+
+### Parent diff2 (parent_end - parent_start) -> ...
+
+#### parent diff2 (x) v child_usableweight (y)
+```{r, fig.width=8, fig.height=8}
+left_join(childuw %>% select(inventoryid, child_usableweight), 
+          parentdiff2, 
+          by="inventoryid") %>%
+  ggplot(aes(x=parentdiff2, y=child_usableweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="parent diff2 (x) v child_usableweight (y)")
+```
+
+#### parent diff2 (x) v childweight (y)
+
+```{r, fig.width=8, fig.height=8}
+left_join(childw %>% select(inventoryid, childweight), 
+          parentdiff2, 
+          by="inventoryid") %>%
+  ggplot(aes(x=parentdiff2, y=childweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="parent diff2 (x) v childweight (y)")
+```
+
+
+### "Difference" (parent_end - parent_start) -> ...
+
+#### "Difference" (x) v child_usableweight (y)
+```{r, fig.width=8, fig.height=8}
+left_join(childuw %>% select(inventoryid, child_usableweight), 
+          diff, 
+          by="inventoryid") %>%
+  ggplot(aes(x=difference, y=child_usableweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="diff (x) v child_usableweight (y)")
+```
+
+#### "Difference" (x) v childweight (y)
+
+```{r, fig.width=8, fig.height=8}
+left_join(childw %>% select(inventoryid, childweight), 
+          diff, 
+          by="inventoryid") %>%
+  ggplot(aes(x=difference, y=childweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="diff (x) v childweight (y)")
+```
+
+
+### "weightdiff2" (newweight - oldweight) -> ...
+
+#### "weightdiff2" (x) v child_usableweight (y)
+```{r, fig.width=8, fig.height=8}
+left_join(childuw %>% select(inventoryid, child_usableweight), 
+          weightdiff2, 
+          by="inventoryid") %>%
+  ggplot(aes(x=weightdiff2, y=child_usableweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="weightdiff2 (x) v child_usableweight (y)")
+```
+
+#### "weightdiff2" (x) v childweight (y)
+
+```{r, fig.width=8, fig.height=8}
+left_join(childw %>% select(inventoryid, childweight), 
+          weightdiff2, 
+          by="inventoryid") %>%
+  ggplot(aes(x=weightdiff2, y=childweight)) +
+  geom_point(position='jitter') +
+  facet_wrap(~pathway, scales='free') +
+  labs(title="weightdiff2 (x) v childweight (y)")
+```
