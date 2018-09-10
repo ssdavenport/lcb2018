@@ -1,0 +1,174 @@
+---
+title: "Conversion Data"
+author: "Steven Davenport"
+date: "`r format(Sys.time(), '%d %B, %Y %H:%M')`"
+output: html_document
+---
+
+This will load pathway data *non-sampled*. That dataset takes a long time to run but is what we have to do to provide total counts. This report will use the last million conversion, subset down to the 40 most popular pathways. This imports "paths" from the CSV produced by an ealier scripts: conversionsCleanExpcomputev1_3.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+# Load *non-sampled* pathway data.
+paths <- read_csv("../output/pathwayRatiosCleaned nObsNA q0.95.csv") %>%
+  mutate(invtypechild = factor(invtypechild),
+         invtypeparent = factor(invtypeparent),
+         pathway = factor(pathway),
+         invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut),
+         pathway = reorder(pathway, volOut))
+
+# Define units for each type of 
+lot_int <- paths %>% dplyr::filter(endtype == "Intermediate"#,
+                        # str_detect(invtypeparent, "Kief|Butter|Oil|Wax|Hash|Solvent")
+                        ) %>%
+  mutate(invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut))
+
+
+retailExtracts <- paths %>% dplyr::filter(endtype == "Retail",
+                        str_detect(invtypeparent, "Kief|Butter|Oil|Wax|Hash|Solvent")) %>%
+  mutate(invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut))
+
+```
+
+## Pathway Volumes: Amount leaving each pathway.
+
+### Flower/OPM to Lots
+
+```{r}
+paths %>% dplyr::filter(endtype == "Lot") %>%
+  ggplot(aes(x=invtypeparent, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') + 
+  labs(title="Use of Flower/OPM Lots, by Next Product",
+       y="Metric Tons of Lotted Material",
+       x="",
+       fill="Next Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal()
+```
+
+
+### Flower/OPM Lots to ingredients
+
+The vast majority of plant material is harvested as flower (not other plant material) (though I'm not sure the totals match Kee Won's data). Most flower lot goes to production of flower-based product, compared to a small share of OPM.
+
+```{r}
+
+
+paths %>% dplyr::filter(str_detect(invtypeparent, "Lot")) %>%
+  mutate(nextproduct = case_when(str_detect(invtypechild, "Usable") ~ "Usable Marijuana",
+                                 str_detect(invtypechild, "Infused") ~ "Marijuana Mix Infused",
+                                 str_detect(invtypechild, "Marijuana Mix") ~ "Marijuana Mix",
+                                 TRUE ~ "Ingredient for Concentrate/Extract")) %>%
+  ggplot(aes(x=invtypeparent, y = volOut/1e6, fill=nextproduct)) + geom_col(position='stack') +
+  labs(title="Production from Lotted Material: Retail v Ingredients",
+       y="Metric Tons of Lotted Material",
+       x="",
+       fill="Next Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal() 
+
+paths %>% dplyr::filter(str_detect(invtypeparent, "Lot"),
+                        !str_detect(invtypechild, "Usable|Sample")) %>%
+  ggplot(aes(x=invtypeparent, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') +
+  labs(title="Production from Lotted Material (Without Usable Marijuana)",
+       y="Metric Tons of Lotted Material",
+       x="",
+       fill="Next Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal() 
+
+paths %>% dplyr::filter(str_detect(invtypeparent, "Lot")) %>%
+  group_by(invtypeparent,
+           flower_product = str_detect(invtypechild, "Usable|Marijuana Mix")) %>%
+  summarise(total=sum(volOut)) %>%
+  group_by(invtypeparent) %>%
+  summarise(mt = sum(total) / 1e6,
+            flowerpct = 100*round(sum(total[flower_product]) / sum(total), 3)) %>%
+  knitr::kable(caption="Production from Lotted Material: Amount going to Flower Retail")
+
+```
+
+### Production of Retail from Ingredients (with usable MJ)
+
+```{r}
+
+paths %>% dplyr::filter(endtype == "Retail") %>%
+  mutate(invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut)) %>%
+  ggplot(aes(x=invtypechild, y = volOut/1e6, fill=invtypeparent)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Retail: Ingredient Volumes",
+       y="Metric Tons of Ingredient",
+       x="",
+       fill="Ingredient",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE)  +
+  theme_minimal() 
+
+
+```
+
+### Production of Extract-Based products from Ingredients
+
+A more clear picture emerges when we exclude usable marijuana production.
+
+```{r, fig.width=9}
+# Output bar chart, where height of bar is number of units going through pathway.
+retailExtracts %>%
+  ggplot(aes(x=invtypeparent, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Use of Extract Ingredients, by End Product",
+       y="Metric Tons of Ingredient",
+       x="",
+       fill="Retail Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal() 
+
+
+retailExtracts %>%
+  ggplot(aes(x=invtypechild, y = volOut/1e6, fill=invtypeparent)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Retail Extracts: Ingredient Volumes",
+       y="Metric Tons of Ingredient",
+       x="",
+       fill="Ingredient",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE)  +
+  theme_minimal() 
+
+
+```
+
+# Pathway Prevalence (by parent type)
+
+```{r}
+# Output bar chart, where height of bar is number of units going through pathway.
+# Adjust units as needed.
+paths %>% filter(endtype == "Lot") %>%
+  ggplot(aes(x=invtypeparent, y = parentPathwayPct, fill=invtypechild)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Production of Lots from Raw", x='Raw Harvest', y='Pathway Prevalence', fill="Lot") + 
+  scale_y_continuous(labels=scales::percent_format()) + theme_minimal()
+
+paths %>% filter(endtype == "Intermediate") %>%
+  ggplot(aes(x=invtypeparent, y = parentPathwayPct, fill=invtypechild)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Production of Ingredients from Bulk/Lots", x='Bulk/Lotted Material', y='Pathway Prevalence',
+       fill='Ingredient') +
+  scale_y_continuous(labels=scales::percent_format()) + theme_minimal()
+
+paths %>% filter(endtype == "Retail") %>%
+  ggplot(aes(x=invtypeparent, y = parentPathwayPct, fill=invtypechild)) + geom_col(position='stack') + coord_flip() +
+  labs(title="Production of Retail Products from Ingredients", x='Ingredient', y='Pathway Prevalence',
+       fill='Retail Product') +
+  scale_y_continuous(labels=scales::percent_format()) + theme_minimal()
+
+
+```
+
+
+
+

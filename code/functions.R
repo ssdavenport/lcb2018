@@ -10,6 +10,15 @@ getInvtype <- function(inventorytype) {
     warn_missing = FALSE)
 }
 
+# get endtype from inventorytype
+getEndtype <- function(inventorytype) {
+  plyr:: mapvalues(
+    x = inventorytype,
+    from = invtypekey$inventorytype,
+    to = invtypekey$endtype,
+    warn_missing = FALSE)
+}
+
 # Make date column from a set of year-month columns
 make_date <- function(yyyy, m, quarter=F) {
   # we need this for negative substring indexing

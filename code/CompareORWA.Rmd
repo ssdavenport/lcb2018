@@ -1,0 +1,129 @@
+---
+title: "Compare OR - WA Sales"
+author: "Steven Davenport"
+date: "7/24/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse); library(ggplot2)
+source("functions.R")
+
+clark <- read_csv("../gqoutput/sales-clarkCo-yearmo.csv") %>% 
+  mutate(date = as.Date(paste0(year, "-", str_sub(paste0(0, month), -2), "-01")),
+         invtype=getInvtype(inventorytype))
+
+or <- read_csv("../data/ORCountySales.csv") %>%
+  mutate(date=as.Date(MonthYear))
+
+orAgg <- or %>%
+  group_by(date, County, ProductType) %>%
+  summarise(Sales=sum(Sales))
+
+orState <- or %>%
+  group_by(date, ProductType) %>%
+  summarise(Sales=sum(Sales))
+
+orStateMed <- or %>%
+  group_by(date, ProductType, CustomerType) %>%
+  summarise(Sales=sum(Sales))
+
+
+multnomahSales <- or %>%
+  filter(County=='Multnomah') %>%
+  group_by(date, ProductType) %>%
+  summarise(Sales = sum(Sales))
+
+comb <- list(dplyr::select(clark, sales, date, invtype) %>% mutate(place="Clark Co"),
+     dplyr::select(multnomahSales, date, sales=Sales, invtype=ProductType) %>% mutate(place="Multnomah Co")) %>%
+  bind_rows 
+
+# Standardize product types
+comb <- comb %>% mutate(type =
+                  case_when(invtype %in% c("Usable Marijuana", "Usable MJ", "Marijuana Mix Package") ~ "Usable",
+                            invtype %in% c("Edible/Tincture", "Liquid Marijuana Infused Edible",
+                                           "Solid Marijuana Infused Edible", "Tincture") ~ "Edible/Tincture",
+                            invtype %in% c("Concentrate/Extract", "Marijuana Extract for Inhalation") ~ "Extract",
+                            TRUE ~ "Other"))
+
+
+```
+
+# Oregon Sales Data
+
+```{r, fig.width=12, fig.height=12}
+ggplot(data=or, aes(x=as.Date(date), y=Sales/1e6, fill=CustomerType)) +
+  geom_col() +
+  facet_wrap(~County, scales='free') +
+  scale_x_date(date_breaks = '1 year', date_labels = "%y") +
+  labs(x='', y='Sales ($M)', title="OR") + theme_minimal()
+```
+
+```{r}
+ggplot(data=orState, aes(x=as.Date(date), y=Sales/1e6, fill=ProductType)) +
+  geom_col() +
+  scale_x_date(date_breaks = '1 year', date_labels = "'%y") +
+  labs(x='', y='Sales ($M)', title="Total OR Sales by County, Product")
+```
+
+```{r}
+ggplot(data=orStateMed, aes(x=as.Date(date), y=Sales/1e6, fill=ProductType)) +
+  geom_col() +
+  scale_x_date(date_breaks = '1 year', date_labels = "'%y") +
+  facet_wrap(~CustomerType) +
+  labs(x='', y='Sales ($M)', title="OR Product Sales, Consumer v Patient")
+```
+
+```{r, fig.width=12, fig.height=12}
+ggplot(data=or %>% 
+         group_by(date, County, ProductType) %>%
+         summarise(Sales = sum(Sales)), 
+       aes(x=as.Date(date), y=Sales/1e6, fill=ProductType)) +
+  geom_col() +
+  scale_x_date(date_breaks = '1 year', date_labels = "'%y") +
+  facet_wrap(~County, scales='free') +
+  labs(x='', y='Sales ($M)', title="OR Product Sales, Consumer v Patient") + 
+  theme_minimal()
+```
+
+# Clark v Multnomah
+
+```{r}
+multnomahSales %>%
+  ggplot(aes(x=as.Date(date), y=Sales/1e6, fill=ProductType)) + 
+  geom_col() +
+  labs(x="", y="Sales ($M)", fill="Inventory Type",
+       title="Multnomah County: Sales by Product")
+```
+
+```{r}
+clark %>%
+  ggplot(aes(x=date, y=sales/1e6, fill=invtype)) + 
+  geom_col() +
+  labs(x="", y="Sales ($M)", fill="Inventory Type",
+       title="Clark County: Sales by Product")
+```
+
+```{r}
+comb <- list(dplyr::select(clark, sales, date, invtype) %>% mutate(place="Clark Co"),
+     dplyr::select(multnomahSales, date, sales=Sales, invtype=ProductType) %>% mutate(place="Multnomah Co")) %>%
+  bind_rows 
+
+# Standardize product types
+comb <- comb %>% mutate(type =
+                  case_when(invtype %in% c("Usable Marijuana", "Usable MJ", "Marijuana Mix Package") ~ "Usable",
+                            invtype %in% c("Edible/Tincture", "Liquid Marijuana Infused Edible",
+                                           "Solid Marijuana Infused Edible", "Tincture") ~ "Edible/Tincture",
+                            invtype %in% c("Concentrate/Extract", "Marijuana Extract for Inhalation") ~ "Extract",
+                            TRUE ~ "Other"))
+
+# with(comb, tapply(invtype, place, unique))
+
+# with(comb, tapply(type, place, unique))
+
+comb %>% ggplot(aes(x=date, y=sales/1e6, fill=type)) + geom_col() +
+  facet_grid(place~.) + theme_minimal() +
+  labs(x="", y="Sales ($M)", fill='Product Type')
+
+```
