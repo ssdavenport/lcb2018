@@ -1,0 +1,321 @@
+---
+title: "conversionsCleanExploreCompute v 1.3 - end of data"
+author: "Steven Davenport"
+date: "`r format(Sys.time(), '%d %B, %Y %H:%M')`"
+output: html_document
+---
+
+v 1.3:
+
++ focusing on calculating conversion ratios.
+
+v 1.2 more stuff.  
+
++ removed "difference" scatterplots as they never showed any patterns.
++ disabled usable weight : weight ratio scatter plots
+
+v l.1 (july 12):
+
++ Changed variables to analyze
+  + removed redundancies (dropping weightdiff2 = childweight, parentdiff2 = parent_difference)
+  + added uw_w_ratio (ratio of usableweight to weight)
+  + added uwXw (usableweight * weight)
++ Changed observations to plot
+  + Sample just N top pathways (set = 16)
+  + from each, sample nObs (set = 2000 for big draws)
++ added/modified tables
+  + sorted for clarity by child type, parent type
++ Added/modified plots
+  + added histograms
+  + fixed formatting for clarity, large values
++ Design changes
+  + Moved parameters to top for easy changing
+  + Streamlined data pipeline
+  + improved outline
+  
+v 1.0 introduced the basic data pipeline.
+
+```{r setup, include=TRUE, message=FALSE, warning=FALSE, echo = TRUE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE)
+library(tidyverse); library(data.table); library(dtplyr); library(knitr); library(lubridate)
+source("functions.R")
+
+conversions <- fread('../Kee Won/conversions.csv') %>%
+  mutate(date = as_datetime(sessiontime, origin = '1970-01-01')) %>%
+  dplyr::filter(year(date) == 2015)
+```
+
+
+## Set parameters
+
+```{r, echo=TRUE}
+lastN <- NA
+nPath <- 40 # set number of pathways to look at
+qTop <- .95 # set quantile for topcoding
+nObs <- NA # obs to sample per pathway group
+options(scipen=7) # num sig digits (after this it will use scientific notation)
+
+# if you've got a LastN provided, just take that excerpt
+if(!is.na(lastN)) {
+  conversions <- conversions %>% tail(lastN)
+}
+
+
+
+
+# TODO:
+# turn off proportional sampling, but rather restrict it to a smaller dataset?
+
+# Chart theme
+chart_theme <- theme_minimal() + 
+  theme(axis.text.x=element_text(angle = -15, hjust = 0)) # rotate text a bit
+  
+```
+
+## Data clean/prep
+
+### Select variables to analyze
+
+Task: create a new var (if needed) for each metric in contention which you'll consider top-coding/exploring, i.e. parent_difference, (parent_start - parent_end), childweight, childusableweight. We will **enforce** parent_difference = parentweight_start - parentweight_end (KW says this only true 98% of the time).
+
+
+```{r}
+# narrow dataframe only to candidate weight columns to needed columns
+conv <- conversions %>%
+  mutate(parent_difference = parentweight_start - parentweight_end,
+        # weightdiff2 = newweight - oldweight, # no longer calculated in v 1.1
+        # parentdiff2 = parentweight_start - parentweight_end, # no longer calculated in v 1.1
+        child_usableweight = as.numeric(child_usableweight),
+        parent_difference = as.numeric(parent_difference),
+        invtypeparent = getInvtype(inventorytype_parent),
+        
+        # Tag with type of end product (retail v intermediate)
+        endtype = getEndtype(inventorytype),
+        
+        # Calculate more stuff
+        uw_w_ratio = child_usableweight / childweight,
+        uwXw = child_usableweight * childweight,
+        invtypechild = getInvtype(inventorytype),
+        pathway = paste0(invtypeparent, " -> ", invtypechild)
+        ) %>%
+  select(inventoryid, 
+         pathway, invtypeparent, invtypechild, endtype,
+         difference, parent_difference, childweight, child_usableweight, uwXw, uw_w_ratio,
+         date) %>%
+  as.data.table
+```
+
+### Sample data from top pathways
+
+Narrow for most common pathways only; sample equally for each. This will ensure that when we do results/scatters, we aren't overwhelmed or ending up with sparse data.
+
+
+```{r}
+# Find most common pathways
+topPathways <- 
+  conv[ , .N, pathway] %>% 
+  arrange(-N) %>%
+  head(nPath) %>%
+  .$pathway
+
+
+# Narrow the data to the top 16 pathways, getting nObs each
+if(is.na(nObs)) {
+  # if there's no value for nObs, don't sample
+  convPath16 <- conv[pathway %in% topPathways]
+} else {
+  # if there is a value, take the sample accordingly
+  convPath16 <- conv[pathway %in% topPathways ,  # narrow
+                     .SD[sample(x= .N, size=min(nObs, .N))], # sample nObs
+                     by = pathway] # ... by pathway
+}
+
+# Add indicator for intermediate child-producttype slope == 1
+convPath16 <- convPath16 %>%
+  mutate(intSlope1 = round(parent_difference / childweight, 2) == 1)
+```
+
+
+### Re-shape for easy computations
+
+```{r}
+# make a "melted" (re-shaped) version for aggregations. ("M" stands for melted)
+convPath16m <- (convPath16 %>% 
+  gather(metric, value, difference:uw_w_ratio)) %>%
+  as.data.table()
+
+```
+
+### Top-code by pathway quantiles
+
+```{r, topCodingQuantiles}
+# Get quantiles
+pathQuants <- 
+  convPath16m[ , 
+               quantile(value, qTop, na.rm=T),
+               by=.(invtypeparent, invtypechild, metric, endtype)] %>%
+  rename(qTop = "V1")
+
+# Make function to apply top-coding by pathway
+topCode <- function(invtypeparentX, invtypechildX, metricX, valueX) {
+  
+  topCodeValue <- pathQuants[invtypeparent == invtypeparentX &
+                               invtypechild == invtypechildX &
+                               metric == metricX] %>%
+    .$qTop
+    
+  return(ifelse(valueX > topCodeValue, topCodeValue, valueX))
+  
+}
+
+idTopCode <- function(invtypeparentX, invtypechildX, metricX, valueX) {
+  
+  topCodeValue <- pathQuants[invtypeparent == invtypeparentX &
+                               invtypechild == invtypechildX &
+                               metric == metricX] %>%
+    .$qTop
+    
+  return(ifelse(valueX > topCodeValue, 'topCoded', 'real'))
+  
+}
+
+# Apply top-coding function to data
+convPath16m <- 
+  convPath16m %>% 
+  rowwise() %>% 
+  mutate(valueTopCoded=topCode(invtypeparent, invtypechild, metric, value)) %>%
+  as.data.table() 
+
+convPath16m <- convPath16m %>%
+  mutate(topCoded = (value != valueTopCoded))
+
+
+```
+
+
+
+
+```{r}
+# Review metrics; prep dataframes ready to plot diff combos
+
+### CHILDREN
+# get child_usableweights
+childuw <- convPath16m[metric=="child_usableweight"] %>%
+  select(-metric) %>%
+  rename(child_usableweight = valueTopCoded)
+
+childw <- convPath16m[metric=="childweight"] %>%
+  select(-metric) %>%
+  rename(childweight = valueTopCoded)
+
+### PARENTS
+parentdiff <- convPath16m[metric=="parent_difference"] %>%
+  select(-metric) %>%
+  rename(parent_difference = valueTopCoded)
+
+diff <- convPath16m[metric=="difference"] %>%
+  select(-metric) %>%
+  rename(difference = valueTopCoded)
+
+```
+
+
+## Ratios
+
+```{r}
+# Remove top-coded values
+ratios <- left_join(childw %>% select(inventoryid, childweight, topCoded) , 
+          parentdiff, 
+          by="inventoryid") %>%
+  mutate(slope = (parent_difference / childweight),
+         remove = topCoded.x | topCoded.y | (round(slope, 1) %in% c(0, .5, 1, 2)))
+
+
+# View edible retail products
+ratiosEdible <- ratios %>%
+  filter(endtype == "Retail",
+         str_detect(invtypechild, "Edible")) %>%
+  mutate(topCoded = topCoded.x | topCoded.y,
+         slopeis1 = childweight == parent_difference,
+         remove=topCoded |slopeis1)
+
+# View non-edible retail products
+ratiosNotEdible <- ratios %>%
+  filter(endtype == "Retail",
+         !str_detect(invtypechild, "Edible")) %>%
+  mutate(topCoded = topCoded.x | topCoded.y,
+         slopeis1 = childweight == parent_difference,
+         remove=topCoded |slopeis1)
+
+# Compute prevalence and ratios
+prevalence <- ratios %>%
+  group_by(invtypeparent, invtypechild, pathway, endtype) %>%
+  summarise(pctslope1 = mean(slope==1),
+            volOutAll = sum(parent_difference),
+            volInAll = sum(childweight),
+            volOut = sum(parent_difference[slope!=1 & !topCoded.x & !topCoded.y]),
+            volIn = sum(childweight[slope!=1  & !topCoded.x & !topCoded.y])
+            ) %>%
+  mutate(ratio = volOut/volIn) %>%
+  group_by(invtypeparent) %>%
+  mutate(parentPathwayPct = volOut / sum(volOut)) %>%
+  arrange(endtype, -invtypeparent, -ratio)
+
+prevalence %>%
+  select(pathway, endtype, volOut, volIn, ratio, parentPathwayPct, pctslope1) %>%
+  knitr::kable(caption="Ratios and Pathway Percents (after removing identities, amounts >90th percentile)")
+
+prevalence %>% write_csv(paste0("../output/pathways", " nObs",nObs, " q", qTop, " 2015.csv"))
+```
+
+### Path prevalence tables
+
+TODO: reproduce these plots AFTER removing outliers from the dataset.
+What percentage of each flower lot goes to each downstream product?
+
+```{r}
+
+convPath16[ str_detect(invtypeparent, "Lot") , # From flower lot
+            .(parentdiff = sum(parent_difference)),
+            .(invtypeparent, invtypechild, pathway)] %>%
+  group_by(invtypeparent) %>%
+  mutate(share = parentdiff/sum(parentdiff)) %>% 
+  ggplot(aes(y=share, x=invtypechild)) + geom_col() + facet_wrap(~invtypeparent) +
+  coord_flip() + 
+  labs("Share from parent")
+
+convPath16[ str_detect(invtypeparent, "Lot") , # From flower lot
+            .(parentdiff = sum(parent_difference)),
+            .(invtypeparent, invtypechild, pathway)] %>%
+  group_by(invtypeparent) %>% 
+  ggplot(aes(y=parentdiff, x=invtypechild)) + geom_col() + facet_wrap(~invtypeparent) +
+  coord_flip() + 
+  labs("Share from parent")
+
+```
+
+
+### Efficiency Tables
+
+```{r}
+# Calculate this but as a time series?
+ratios[endtype == "Intermediate" & !remove, 
+       .(convrateinv = (sum(childweight) / sum(parent_difference))^-1),
+      .(pathway)] %>%
+  arrange(-convrateinv) %>%
+  knitr::kable(caption="Grams of Lots -> 1 gram Intermediate Product")
+
+ratios[endtype == "Retail" & str_detect(invtypechild, "Edible"),
+       .(convrateinv = (sum(childweight) / sum(parent_difference))^-1),
+      .(pathway)] %>%
+  arrange(-convrateinv) %>%
+  knitr::kable(caption="Grams of intermediate product per Edible")
+
+ratiosNotEdible[endtype == "Retail" & !str_detect(invtypechild, "Edible"),
+       .(convrateinv = (sum(childweight) / sum(parent_difference))^-1),
+      .(pathway)] %>%
+  arrange(-convrateinv) %>%
+  knitr::kable(caption="Grams of intermediate product per Retail Product")
+
+```
+

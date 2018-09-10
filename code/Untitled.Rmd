@@ -1,0 +1,201 @@
+---
+title: "Pathway Years"
+author: "Steven Davenport"
+date: "7/25/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+filedir <- "../output/"
+
+# Load data on pathways
+pathYr <- 
+  paste0(
+    filedir,
+    str_subset(list.files(filedir), "pathways nObsNA q0.95 201")) %>%
+  lapply(read.csv)
+
+for (i in 1:4) {
+  pathYr[[i]]$year <- i + 2013
+}
+
+pathYr <- pathYr %>% 
+  bind_rows
+
+
+
+retailExtracts <- pathYr %>%
+  mutate(invtypechild = factor(invtypechild),
+         invtypeparent = factor(invtypeparent),
+         pathway = factor(pathway),
+         invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut),
+         pathway = reorder(pathway, volOut)) %>% 
+  dplyr::filter(endtype == "Retail"
+                # str_detect(invtypeparent, "Kief|Butter|Oil|Wax|Hash|Solvent")
+                ) %>%
+  mutate(invtypechild = reorder(invtypechild, volOut),
+         invtypeparent = reorder(invtypeparent, volOut)) %>%
+  filter(invtypechild!="Capsule") %>%
+  
+  # Further collapse categories and shorten names
+  # Collapse categories
+  mutate(invtypechild = case_when(str_detect(invtypechild, "Edible") ~ "Edible",
+                                  str_detect(invtypechild, "Infused") ~ "Other Infused",
+                                  str_detect(invtypechild, "Extract") ~ "Extract",
+                                  TRUE ~ as.character(invtypechild))) %>%
+  mutate(invtypeparent = case_when(invtypeparent %in% c("Hash", "Kief", "Bubble Hash") ~ "Hash/Kief/Bubble Hash",
+                                   str_detect(invtypeparent, "Infused|Food Grade") ~ "Infused Fat/Oil\nor Food-Grade Solvent",
+                                   str_detect(invtypeparent, "Wax") ~ "Hydrocarbon Wax",
+                                   str_detect(invtypeparent, "Co2") ~ "CO2 Hash Oil",
+                                  # str_detect(invtypeparent, "Extract") ~ "Extract",
+                                  TRUE ~ as.character(invtypeparent)))
+
+```
+
+
+```{r}
+# Same chart, but rotate to facet through invtype parent
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana") %>%
+  ggplot(aes(x=year, y = volOut/1e6)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypeparent) +
+  labs(title='Production of "Ingredients"',
+       y="Metric Tons",
+       x="") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana", invtypeparent!="Flower Lot") %>%
+  ggplot(aes(x=year, y = volOut/1e6)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypeparent) +
+  labs(title='Production of "Ingredients"',
+       y="Metric Tons",
+       x="") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana", invtypeparent!="Flower Lot") %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypeparent) +
+  labs(title='Production: "Ingredients"',
+       y="Metric Tons (Ingredient Weight)",
+       x="",
+       fill="Form of Retail Product") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  scale_fill_brewer(palette="Set1")
+
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana", invtypeparent!="Flower Lot") %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypeparent)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypechild) +
+  labs(title='Production: Retail Products',
+       y="Metric Tons (Ingredient Weight)",
+       x="",
+       fill="Ingredient Made From") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  scale_fill_brewer(palette="Set2")
+
+
+
+
+
+
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana") %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypeparent) +
+  labs(title='Production of "Ingredients"',
+       y="Metric Tons",
+       x="",
+       fill="Final Retail Product Type") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+
+```
+
+```{r}
+# Rotate
+retailExtracts %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypeparent) +
+  labs(title="Use of Extract Ingredients, by End Product",
+       y="Metric Tons of Ingredient",
+       x="",
+       fill="Retail Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+
+# Rotate
+retailExtracts %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypeparent)) + geom_col(position='stack') +# coord_flip() +
+  facet_wrap(~invtypechild) +
+  labs(title="Non-Usable Marijuana Production (by weight of ingredients)",
+       y="Metric Tons",
+       x="",
+       fill="Ingredient") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+# "Production volumes of intermediate goods (metric tons)"
+retailExtracts %>%
+  filter(invtypeparent!="Usable Marijuana") %>%
+  ggplot(aes(x=year, y = volOut/1e6, fill=invtypeparent)) + geom_col(position='stack') +# coord_flip() +
+  # facet_wrap(~invtypeparent) +
+  labs(title="Production volumes of intermediate goods (metric tons)",
+       y="Metric Tons",
+       x="",
+       fill="Ingredient") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+# "Volume by Ingredient (metric tons)"
+retailExtracts %>%
+  ggplot(aes(x=as.numeric(year), y = volOut/1e6, fill=invtypechild)) + geom_col(position='stack') +# coord_flip() +
+  # facet_wrap(~invtypechild) +
+  labs(title="Amounts of extracts/infusions produced (metric tons of ingredients)",
+       # subtitle="s",
+       y="Metric Tons",
+       x="",
+       fill="Retail Product") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+```{r}
+
+# Swap fill and x
+retailExtracts %>%
+  ggplot(aes( y = volOut/1e6, x=year)) + geom_col(position='stack') +# coord_flip() +
+  # fill=invtypeparent,
+  facet_wrap(~invtypechild) +
+  labs(title="Use of Extract Ingredients, by End Product",
+       y="Metric Tons of Ingredient",
+       x="",
+       fill="Retail Product",
+       subtitle="among last 1 million conversions") +
+  guides(color=FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+
+```
+
