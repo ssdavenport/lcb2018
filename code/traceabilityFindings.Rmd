@@ -193,6 +193,14 @@ convDetailed %>%
   kable(caption='inventoryconversion parents')
 ```
 
+## Results
+
+
+### Harvest
+
+[[ Results will go here ]]  
+[[ kg harvest of wet flower, dry flower, OPM, and waste]] 
+
 And the 5 most popular child products (data needs cleaning):
 
 ```{r}
@@ -209,14 +217,6 @@ convDetailed %>%
 ```
 
 Though it is less interesting, we can also tabulate data by parent type. This can be used to validate.
-
-
-## Results
-
-### Harvest
-
-[[ Results will go here ]]  
-[[ kg harvest of wet flower, dry flower, OPM, and waste]] 
 
  
 ```{r, eval = F, include=F}
@@ -262,6 +262,12 @@ GROUP BY location, inventorytype;
 [[ Results will go here ]]  
 [[ kg harvest of flower lot, opm lot, marijuana mix]] 
 
+
+### Processing / Manufacturing
+
+This sub-section includes: 1) production volumes, 2) pathway prevalence, 3) conversion ratios
+
+#### Production Volumes
 
 ### Processing / Manufacturing
 
