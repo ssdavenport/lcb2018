@@ -5,7 +5,7 @@ date: "`r format(Sys.time(), '%d %B, %Y %H:%M')`"
 output: html_document
 ---
 
-This will load pathway data *non-sampled*. That dataset takes a long time to run but is what we have to do to provide total counts. This report will use the last million conversion, subset down to the 40 most popular pathways. This imports "paths" from the CSV produced by an ealier scripts: conversionsCleanExpcomputev1_3.
+This will load pathway data *non-sampled*. That dataset takes a long time to run but is what we have to do to provide total counts. This report will use the last million conversion, subset down to the 40 most popular pathways. This imports "paths" from the CSV produced by an earlier script: conversionsCleanExpcomputev1_3.
 
 
 ```{r setup, include=FALSE}
@@ -34,6 +34,15 @@ retailExtracts <- paths %>% dplyr::filter(endtype == "Retail",
          invtypeparent = reorder(invtypeparent, volOut))
 
 ```
+
+## Production Volumes
+
+```{r}
+paths %>%
+  group_by()
+
+```
+
 
 ## Pathway Volumes: Amount leaving each pathway.
 

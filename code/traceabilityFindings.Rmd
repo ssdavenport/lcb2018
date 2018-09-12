@@ -6,7 +6,7 @@ output: html_document
 ---
 
 **Version history**
-v1.5 - September Draft.
+v1.5 - September Draft.  
 v1.4 (July 3) Restructured outline; sent to JPC/BK for review.
 v1.3 (June 30) restructured outline.  
 v1.2 (June 30) added analysis of inventoryconversions table.  
@@ -195,7 +195,6 @@ convDetailed %>%
 
 ## Results
 
-
 ### Harvest
 
 [[ Results will go here ]]  
@@ -257,30 +256,37 @@ GROUP BY location, inventorytype;
 # WHERE b.locationtype < 7;
 ```
 
-### Lotting
-
-[[ Results will go here ]]  
-[[ kg harvest of flower lot, opm lot, marijuana mix]] 
-
-
-### Processing / Manufacturing
-
-This sub-section includes: 1) production volumes, 2) pathway prevalence, 3) conversion ratios
-
 #### Production Volumes
 
 ### Processing / Manufacturing
 
 This sub-section includes: 1) production volumes, 2) pathway prevalence, 3) conversion ratios
 
-#### Production Volumes
+
+
+## Section 4A
+
+### 4A Harvest Analysis
+
++ # Plants
++ Harvest/Waste weight
++ Harvest/Plant
+
+(Gather this from Kee Won's data)  
+
+### 4B Production Weight (MT)
+
+#### Ingredients
 
 ```{r}
+# TODO: clean childwt to remove outliers. Currently you have way too much childwt going to Extract for Inhalation and nConversions!
+
 convChild <- read_csv("../gqoutput/results-20180630-131250.csv") %>%
   mutate(inventorytype = getInvtype(inventorytype),
          wtPer = childwt/nConversions,
          usablewtPer = childusablewt/nConversions)  %>%
   arrange(-childwt)
+
 # -- QUERY: CHILD WEIGHTS.
 #  SELECT inventorytype,
 #    count(*) as nConversions,
@@ -289,7 +295,141 @@ convChild <- read_csv("../gqoutput/results-20180630-131250.csv") %>%
 # FROM [full_WA_data.biotrackthc_inventoryconversions]
 # GROUP BY inventorytype
 
-knitr::kable(convChild, digits=0)
+# Preview full table
+# knitr::kable(convChild, digits=0)
+
+# Look only at Ingredient Types
+ingrdnts <- c("Hydrocarbon Wax", "Bubble Hash", "C02 Hash Oil", "Marijuana Mix", "Food Grade Solvent Extract", 
+              "Infused Dairy Butter or Fat in Solid Form", "Infused Cooking Oil",
+              "Hash", "Kief")
+
+# Chart production of ingredients (later, repeat annually)
+convChild %>%
+  select(inventorytype, Units=childwt, G =childusablewt) %>%
+  mutate(KG=G/1e3) %>% 
+  filter(inventorytype%in%ingrdnts) %>%
+  select(-G) %>%
+  arrange(-KG) %>%
+  knitr::kable(caption="Ingredient Production. Repeat this analysis for separate years?")
+  
+```
+
+#### Retail
+
+##### Flower
+
+```{r}
+retailFlower <- c("Usable Marijuana", "Marijuana Mix")
+
+# Chart production of ingredients (later, repeat annually)
+convChild %>%
+  select(inventorytype, Units=childwt, G =childusablewt) %>%
+  mutate(MT=G/1e6) %>% 
+  filter(inventorytype%in%retailFlower) %>%
+  select(-G) %>%
+  arrange(-MT) %>%
+  knitr::kable(caption="Ingredient Production. Repeat this analysis for separate years?", digits=1)
+```
+
+##### Non-Flower
+
+```{r}
+retailOther <- c("Solid Marijuana Infused Edible",
+                 "Liquid Marijuana Infused Edible",
+                 "Marijuana Extract for Inhalation",
+                 "Marijuana Mix Infused",
+                 "Capsule",
+                 "Marijuana Infused Topicals",
+                 "Tincture",
+                 "Suppository")
+
+# Repeat later for each year.
+convChild %>%
+  filter(inventorytype%in%retailOther) %>%
+  select(inventorytype, Units=childwt, G=childusablewt) %>%
+  mutate(KG=G/1e3) %>% 
+  select(-G) %>%
+  arrange(-KG)
+  
+```
+
+#### THC/CBD Concentrations
+
+```{r}
+# Load potency test data scores
+potency <- read_csv("../data/potencytests.csv")
+
+# clean for consistent Total THC/CBD.
+potencyAnnual <-
+  potency %>%
+  mutate(TotalTHC = THC + 0.877 * THCA,
+         TotalCBD = CBD + 0.877 * CBDA
+         ) %>%
+  select(TotalTHC, TotalCBD, inventorytype, invtype, test_year) %>%
+  group_by(invtype, test_year) %>%
+  summarise(TotalTHC = mean(TotalTHC, na.rm=T),
+            TotalCBD = mean(TotalCBD, na.rm=T))
+
+
+# Export file for use in estimating THC content of products!
+potencyAnnual %>%
+  write_csv("../data/thccbdannual.csv")
+
+```
+
+### 4C. THC/CBD, %
+
+```{r}
+potencyAnnual <- read_csv("../data/thccbdannual.csv")
+
+# Display THC
+potencyAnnual %>% 
+  select(-TotalCBD) %>%
+  filter(invtype %in% ingrdnts) %>%
+  spread(invtype, TotalTHC) %>%
+  kable(digits=1, caption='Average THC %s')
+
+# Display CBD
+potencyAnnual %>% 
+  select(-TotalTHC) %>%
+  filter(invtype %in% ingrdnts) %>%
+  spread(invtype, TotalCBD) %>%
+  kable(digits=2, caption='Average CBD %s')
+
+
+```
+
+### 4D. THC/CBD, kg
+
+```{r}
+# Estimate kgTHC for retail products (TotalTHC % * KG)
+convChild %>%
+  filter(inventorytype%in%retailOther) %>%
+  select(inventorytype, Units=childwt, G=childusablewt) %>%
+  left_join(potencyAnnual %>%
+               filter(test_year==2017) %>% select(-test_year),
+             by=c('inventorytype'='invtype')) %>%
+  mutate(kgTHC = G * TotalTHC / 1e6,
+         kgCBD = G * TotalCBD / 1e6) %>%
+  mutate(KG = G / 1e3,
+         UnitsK = Units /1e3) %>% 
+  ungroup %>%
+  select(inventorytype, UnitsK, KG, THC=TotalTHC, CBD=TotalCBD, kgTHC, kgCBD) %>%
+  arrange(-UnitsK) %>%
+  kable(digits=1)
+  
+  
+```
+
+### 4E. Farmgate revenue (by producer/processor good)
+
+Query the inventorytransfers table; group by inventorytype; use inventoryID cutoffs
+
+1.	$ for non-processed outputs (bulk flower / OPM / Wholesale Mix)
+2.	$ for processed outputs (usable MJ / BHO / CO2 Hash Oil / etc)
+
+```{r}
+
 ```
 
 #### Conversion Pathway Prevalence
@@ -335,7 +475,7 @@ ratiosRaw <- convDetailed %>%
 kable(ratiosRaw)
 ```
 
-### Retail Products
+### 4F. Retail Products
 
 ```{r, retailVolume}
 # GoogleQuery: RetailUSDxType
