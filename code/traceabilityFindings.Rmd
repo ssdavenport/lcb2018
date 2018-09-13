@@ -169,10 +169,14 @@ transfers <- left_join(transferVolumes, transferUsableWeight) %>%
 
 #### "Ingredients"
 
+####  TODO: Re-make convchildT/convChildT10 after sorting on id?
 ```{r}
 # TODO: clean childwt to remove outliers. Currently you have way too much childwt going to Extract for Inhalation and nConversions!
-
-
+# Load version of convChild with a time dimension.
+convChildT <- read.csv("../gqoutput/results-20180913-161933.csv") %>%
+  mutate(inventorytype = getInvtype(inventorytype))
+convChildT10 <- read.csv("../gqoutput/results-20180913-163153.csv") %>%
+  mutate(inventorytype = getInvtype(inventorytype))
 # Preview full table
 # knitr::kable(convChild, digits=0)
 
@@ -181,7 +185,33 @@ ingrdnts <- c("Hydrocarbon Wax", "Bubble Hash", "C02 Hash Oil", "Marijuana Mix",
               "Infused Dairy Butter or Fat in Solid Form", "Infused Cooking Oil",
               "Hash", "Kief")
 
-# Chart production of ingredients (later, repeat annually)
+# Production of ingredient, 3 time periods, KG, table
+convChildT %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
+  mutate(KG=G/1e3) %>%
+  filter(inventorytype%in%ingrdnts) %>%
+  select(-G) %>%
+  arrange(-KG) %>%
+  select(inventorytype, KG, t) %>%
+  spread(t, KG) %>%
+  arrange(-`3`) %>%
+  kable(digits=1, caption="Kg of each ingredient product, by year")
+
+# Production of ingredient, 10 time periods, Units, chart
+convChildT10 %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
+  mutate(KG=G/1e3) %>%
+  filter(inventorytype%in%ingrdnts,
+         t<10,
+         conversions>1) %>%
+  select(-G) %>%
+  arrange(-KG) %>%
+  ggplot(aes(x=t, y=Units, color=inventorytype)) + geom_line() +
+  labs(title="Number of Conversions by Ingredient",
+       y="Units Produced")
+
+# No Longer Need:
+# Table ingredient production, all-time (units, KG)
 convChild %>%
   select(inventorytype, Units=childwt, G =childusablewt) %>%
   mutate(KG=G/1e3) %>% 
@@ -189,6 +219,7 @@ convChild %>%
   select(-G) %>%
   arrange(-KG) %>%
   knitr::kable(caption="Ingredient Production. Repeat this analysis for separate years?")
+
   
 ```
 
@@ -197,14 +228,61 @@ convChild %>%
 ```{r}
 retailFlower <- c("Usable Marijuana", "Marijuana Mix")
 
-# Chart production of ingredients (later, repeat annually)
-convChild %>%
-  select(inventorytype, Units=childwt, G =childusablewt) %>%
-  mutate(MT=G/1e6) %>% 
+# Production of ingredient, 3 time periods, KG, table
+convChildT %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
+  mutate(KG=G/1e3) %>%
   filter(inventorytype%in%retailFlower) %>%
   select(-G) %>%
+  arrange(-KG) %>%
+  select(inventorytype, KG, t) %>%
+  spread(t, KG) %>%
+  arrange(-`3`) %>%
+  kable(digits=1, caption='Production of "Flower" Types by year (KG)')
+
+convChildT %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
+  mutate(UnitsK=Units/1e3) %>%
+  filter(inventorytype%in%retailFlower) %>%
+  select(inventorytype, Units, t) %>%
+  spread(t, Units) %>%
+  arrange(-`3`) %>%
+  kable(digits=1, caption='Production of "Flower" Types by year (Units)')
+
+# Production of ingredient, 10 time periods, Units, chart
+convChildT10 %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
+  mutate(MT=G/1e6) %>%
+  filter(inventorytype%in%retailFlower,
+         t<10,
+         conversions>1) %>%
+  select(-G) %>%
   arrange(-MT) %>%
-  knitr::kable(caption='Ingredient Production of "Flower" Types -Repeat for separate years?', digits=1)
+  ggplot(aes(x=t, y=MT, color=inventorytype)) + geom_line() +
+  labs(title="Number of Conversions, Retail Flower",
+       y="MT Produced")
+
+# Production of ingredient, 10 time periods, Units, chart
+convChildT10 %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
+  mutate(MT=G/1e6) %>%
+  filter(inventorytype%in%retailFlower,
+         t<10,
+         conversions>1) %>%
+  select(-G) %>%
+  arrange(-MT) %>%
+  ggplot(aes(x=t, y=Units/1e3, color=inventorytype)) + geom_line() +
+  labs(title="Number of Conversions, Retail Flower",
+       y="1000 Units Produced")
+
+# CHART ALL-TIME (Turned off)
+# convChild %>%
+#   select(inventorytype, Units=childwt, G =childusablewt) %>%
+#   mutate(MT=G/1e6) %>% 
+#   filter(inventorytype%in%retailFlower) %>%
+#   select(-G) %>%
+#   arrange(-MT) %>%
+#   knitr::kable(caption='Ingredient Production of "Flower" Types -Repeat for separate years?', digits=1)
 ```
 
 #### Retail, Non-Flower
@@ -219,15 +297,44 @@ retailOther <- c("Solid Marijuana Infused Edible",
                  "Tincture",
                  "Suppository")
 
-# Repeat later for each year.
-convChild %>%
+# Production of ingredient, 3 time periods, KG, table
+convChildT %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
+  mutate(KG=G/1e3) %>%
   filter(inventorytype%in%retailOther) %>%
-  select(inventorytype, Units=childwt, G=childusablewt) %>%
-  mutate(KG=G/1e3) %>% 
   select(-G) %>%
-  arrange(-KG) %>% 
-   knitr::kable(caption='Ingredient Production of "Non-Flower" Types -Repeat for separate years?', digits=2)
-  
+  arrange(-KG) %>%
+  select(inventorytype, KG, t) %>%
+  spread(t, KG) %>%
+  arrange(-`3`) %>%
+  kable(digits=1, caption='Production of Non-Flower Retail (KG)')
+
+# Production of ingredient, 10 time periods, Units, chart
+convChildT %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
+  mutate(UnitsK=Units/1e3) %>%
+  filter(inventorytype%in%retailOther) %>%
+  select(-G) %>%
+  arrange(-UnitsK) %>%
+  select(inventorytype, t, UnitsK) %>%
+  spread(t, UnitsK) %>%
+  arrange(-`3`) %>%
+  kable(digits=1, caption='Production of Non-Flower Retail (KG)')
+
+# Production of ingredient, 10 time periods, Units, chart
+convChildT10 %>%
+  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
+  mutate(MT=G/1e6) %>%
+  filter(inventorytype%in%retailOther,
+         t<10,
+         conversions>1) %>%
+  select(-G) %>%
+  arrange(-MT) %>%
+  ggplot(aes(x=t, y=Units/1e3, color=inventorytype)) + geom_line() +
+  labs(title="Production of Non-Flower Retail",
+       y="Units Produced (1000s)")
+
+# 
 ```
 
 ### 4C THC/CBD Concentrations
@@ -285,15 +392,55 @@ convChild %>%
 
 #### Plants/Harvest/Lotted Material (Producers)
 
-This contains non-processed inputs
+This contains non-processed inputs.
+
+#### TODO: add transfers divided by 3 time points for rows in tables?
 
 ```{r}
 plants <- c("Seed", "Plant Tissue", "Mature Plant", "Clone", "Wet Flower")
 lots <- c("Flower Lot", "Other Plant Material Lot")
 
+# Import inventorytransfers with 10 time points cut by ID
+transfersT10 <- read.csv("../gqoutput/results-20180913-171901.csv") %>%
+  mutate(inventorytype = getInvtype(inventorytype),
+         pricePerG = kUSD/kg,
+         unitsK=units/1e3,
+         perPerUnit = kUSD/unitsK) %>%
+  filter( t < max(t))
+
+transferT10Max <- max(transfersT10$t)
+
 transfers %>%
   filter(invtype %in% c(plants, lots)) %>% 
   arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
+
+transfersT10 %>%
+  filter(inventorytype %in%c(plants, lots)) %>%
+  select(kUSD, t, inventorytype) %>%
+  spread(inventorytype, kUSD) %>%
+  kable(caption="$1000 sales", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%c(plants, lots)) %>%
+  select(units, t, inventorytype) %>%
+  spread(inventorytype, units) %>%
+  kable(caption="1000 units", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%c(plants, lots)) %>%
+  select(kg, t, inventorytype) %>%
+  spread(inventorytype, kg) %>%
+  kable(caption="kg", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%c(plants, lots)) %>%
+  ggplot(aes(x=t, y=units/1e3, color=inventorytype)) + geom_line() +
+  labs(title="Plant and Lot Sales by Units (1000)")
+
+transfersT10 %>%
+  filter(inventorytype %in%c(plants, lots)) %>%
+  ggplot(aes(x=t, y=kUSD, color=inventorytype)) + geom_line() +
+  labs(title="Plant and Lot Sales by $1000s")
 ```
 
 #### "Ingredients" (Processors)
@@ -303,6 +450,35 @@ This contains procesed inputs
 ```{r}
 transfers %>%
   filter(invtype %in% ingrdnts) %>% arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
+
+transfersT10 %>%
+  filter(inventorytype %in%ingrdnts) %>%
+  select(kUSD, t, inventorytype) %>%
+  spread(inventorytype, kUSD) %>%
+  kable(caption="$1000 sales", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%ingrdnts) %>%
+  select(units, t, inventorytype) %>%
+  spread(inventorytype, units) %>%
+  kable(caption="1000 units", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%ingrdnts) %>%
+  select(kg, t, inventorytype) %>%
+  spread(inventorytype, kg) %>%
+  kable(caption="kg", digits=1)
+
+transfersT10 %>%
+  filter(inventorytype %in%ingrdnts) %>%
+  ggplot(aes(x=t, y=units/1e3, color=inventorytype)) + geom_line() +
+  labs(title="Ingredient Sales by Units (1000)")
+
+transfersT10 %>%
+  filter(inventorytype %in%ingrdnts) %>%
+  ggplot(aes(x=t, y=kUSD, color=inventorytype)) + geom_line() +
+  labs(title="Ingredient Sales by $1000s")
+
 ```
 
 #### Retail Products
@@ -315,6 +491,38 @@ transfers %>%
   mutate(pricePerG = saleprice/usableweight) %>%
   arrange(-nTransfers) %>% kable(digits=2)
 ```
+
+```{r, fig.width=10}
+transfers %>%
+  filter(invtype %in% c(retailFlower, retailOther)) %>% 
+  mutate(pricePerG = saleprice/usableweight) %>%
+  arrange(-saleprice) %>% kable(digits=2)
+
+
+transfersT10 %>%
+  filter(inventorytype %in% c(retailFlower, retailOther)) %>%
+  arrange(-units) %>%
+  select(t, inventorytype, unitsK) %>%
+  spread(inventorytype, unitsK)%>% 
+  kable(digits=2, caption='1000 units')
+
+transfersT10 %>%
+  filter(inventorytype %in% c(retailFlower, retailOther)) %>%
+  arrange(-kUSD) %>%
+  select(t, inventorytype, kUSD) %>%
+  spread(inventorytype, kUSD)%>% 
+  kable(digits=2)
+
+transfersT10 %>%
+  filter(inventorytype %in% c(retailFlower, retailOther)) %>%
+  gather(metric, value, units, kg, kUSD, pricePerG) %>%
+  filter(metric!='kg') %>%
+  ggplot(aes(x=t, y=value, color=inventorytype)) + geom_line() +
+  facet_wrap(~metric, scales='free') +
+  labs(title="Retail Production: $, Units, Price-per-kg-usableweight")
+  
+```
+
 
 ### 4E. Retail Products
 
