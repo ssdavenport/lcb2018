@@ -127,6 +127,33 @@ convParent <- read_csv("../gqoutput/results-20180630-130516.csv") %>%
   mutate(inventorytype_parent = getInvtype(inventorytype_parent)) %>%
   mutate(wtPerConv = parentwt/nConversions) %>%
   arrange(-parentwt)
+
+# Get Transfer Volumes
+# Get Ingredient weights.
+# -- Query usable weight of eligible transfers
+# SELECT inventorytype,
+#    sum(CAST(USABLEWEIGHT as integer)) as usableweight
+# FROM [full_WA_data.biotrackthc_inventorytransfers]
+# WHERE USABLEWEIGHT is not null and CAST(inventorytype as integer) <=40
+# GROUP BY inventorytype
+# ORDER BY inventorytype
+transferUsableWeight <- read_csv("../gqoutput/results-20180912-182538.csv")
+
+# -- Query Sale Price of All Transfers
+# SELECT inventorytype,
+#    count(*) as nTransfers,
+#    sum(CAST(saleprice as integer)) as saleprice
+# FROM [full_WA_data.biotrackthc_inventorytransfers]
+# WHERE saleprice is not null  and CAST(inventorytype as integer) <=40
+# GROUP BY inventorytype
+# ORDER BY inventorytype
+transferVolumes <- read_csv("../gqoutput/results-20180912-181851.csv")
+
+transfers <- left_join(transferVolumes, transferUsableWeight) %>%
+  mutate(invtype = getInvtype(inventorytype)) %>%
+  select(invtype, nTransfers, saleprice, usableweight) %>%
+  mutate(pricePer = saleprice / nTransfers) 
+
 ```
 
 
@@ -134,11 +161,9 @@ convParent <- read_csv("../gqoutput/results-20180630-130516.csv") %>%
 
 ### 4A Harvest Analysis
 
-+ Plants
-+ Harvest/Waste weight
-+ Harvest/Plant
++ Plants, Harvest Weight, Harvest per plant. See .docx
 
-(Gather this from Kee Won's data)  
+#### Waste?
 
 ### 4B Amount Produced (Units, MT)
 
@@ -258,15 +283,38 @@ convChild %>%
 
 ### 4D. Farmgate revenue (by producer/processor good)
 
-#### Producers/Processors
+#### Plants/Harvest/Lotted Material (Producers)
 
-#### Retailers
+This contains non-processed inputs
 
-Query the inventorytransfers table; group by inventorytype; use inventoryID cutoffs
+```{r}
+plants <- c("Seed", "Plant Tissue", "Mature Plant", "Clone", "Wet Flower")
+lots <- c("Flower Lot", "Other Plant Material Lot")
 
-1.	$ for non-processed outputs (bulk flower / OPM / Wholesale Mix)
-2.	$ for processed outputs (usable MJ / BHO / CO2 Hash Oil / etc)
+transfers %>%
+  filter(invtype %in% c(plants, lots)) %>% 
+  arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
+```
 
+#### "Ingredients" (Processors)
+
+This contains procesed inputs
+
+```{r}
+transfers %>%
+  filter(invtype %in% ingrdnts) %>% arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
+```
+
+#### Retail Products
+
+This examines only retail products.
+
+```{r}
+transfers %>%
+  filter(invtype %in% c(retailFlower, retailOther)) %>% 
+  mutate(pricePerG = saleprice/usableweight) %>%
+  arrange(-nTransfers) %>% kable(digits=2)
+```
 
 ### 4E. Retail Products
 

@@ -1,0 +1,199 @@
+---
+title: "Reporting Harvest Statistics for Washington State"
+author: "Kee Won Song"
+date: "`r format(Sys.time(), '%B %d, %Y (%H:%M)')`"
+output: html_document
+---
+
+
+## Introduction
+This document will calculate statistics from the table named 'plantderivatives' in the Washington State Marijuana Traceability data set.  For most plants, a wet weight and a dry weight are reported.  For plants that are missing either a wet weight or a dry weight, the missing weight was imputed.  The conversion ratio for each producer was calculated for all plants that reported a wet and dry weight.  This ratio was used to impute missing weights.  Conversion ratios were constrained to fall between 0.14 and 0.35, a range that was guided by existing literature on yield.  Dry weights greater than 1.5 kg (3.3 lbs) were removed from the data set (11,550 plants or 0.2%).  This cutoff point was guided by the literature. 
+
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      # Graphic output
+                      fig.width = 8, fig.align='center')
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(readr)
+library(lubridate)
+library(forcats)
+library(ggthemes)
+library(knitr)
+
+#Set scipen
+options(scipen = 100)
+
+```
+
+ 
+ 
+```{r}
+
+##Import plant statistics
+plant_stats <- read.csv('~/Documents/Cannabis Study/Final Analysis/plant_stats_distinct_location.csv')
+
+
+```
+
+
+
+```{r}
+
+#Remove rows where dry weight and wet weight are both zero: 56,335 rows
+plant_stats <- filter(plant_stats, wet_weight > 0 | dry_weight > 0)
+
+#Create a data set for plants that were measured at different locations
+plantid_dup <- plant_stats[which(duplicated(plant_stats$plantid)),]
+aggregate_plants <- filter(plant_stats, (plantid %in% plantid_dup$plantid) & plantid != 'NULL')
+
+#Add new dry weight column
+aggregate_plants <- aggregate_plants %>% group_by(plantid) %>% mutate(sum_dry_weight = sum(dry_weight))
+aggregate_plants <- filter(aggregate_plants, dry_weight == 0)
+aggregate_plants <- select(aggregate_plants, -dry_weight)
+
+colnames(aggregate_plants) <- c("location", "locationtype", "plantid","sessiontime", "wet_weight", "opm_weight", "dry_weight")
+
+
+#Now remove all those plants from the original data set and rbind the aggregated plants back in
+plant_stats <- filter(plant_stats, !plantid %in% aggregate_plants$plantid)
+#Now combine the two data sets
+plant_stats <- plyr::rbind.fill(plant_stats, aggregate_plants)
+
+#Convert time stamp to a datetime object for year and month
+plant_stats$date <- as_datetime(plant_stats$sessiontime)
+plant_stats$year <- year(as_datetime(plant_stats$sessiontime))
+plant_stats$month <- month(as_datetime(plant_stats$sessiontime))
+
+```
+
+
+
+
+
+```{r}
+
+
+#Remove plants with a dry weight that is unbelievable.
+plant_stats <- filter(plant_stats, wet_weight < 10500, dry_weight < 1500)
+
+#Subset for all non-zero rows
+conversion <- filter(plant_stats, dry_weight > 0 & wet_weight > 0) %>% group_by(location) %>%
+                summarize(ratio = sum(dry_weight) / sum(wet_weight))
+
+#Impose lower and upper bounds on ratio of dry to wet
+conversion$ratio[which(conversion$ratio < .14)] <- .14
+conversion$ratio[which(conversion$ratio > .35)] <- .35
+
+#Merge the conversion ratios into the data set
+plant_stats <- merge(plant_stats, conversion, by = 'location', all.x = T)
+
+#Use upper and lower bounds for conversions where there are no values to calculate the actual ratio
+plant_stats$ratio[which(plant_stats$wet_weight == 0 & is.na(plant_stats$ratio))] <- .35
+plant_stats$ratio[which(plant_stats$dry_weight == 0 & is.na(plant_stats$ratio))] <- .14
+
+#Impute the weights
+plant_stats$dry_weight[which(plant_stats$dry_weight == 0)] <- plant_stats$wet_weight[which(plant_stats$dry_weight == 0)] * plant_stats$ratio[which(plant_stats$dry_weight == 0)]
+plant_stats$wet_weight[which(plant_stats$wet_weight == 0)] <- plant_stats$dry_weight[which(plant_stats$wet_weight == 0)] * (1 / plant_stats$ratio[which(plant_stats$wet_weight == 0)])
+
+```
+
+
+```{r}
+
+#Create a monthly index
+plant_stats$month_index <- 0
+plant_stats$month_index[which(plant_stats$year == 2014)] <- plant_stats$month[which(plant_stats$year == 2014)]
+plant_stats$month_index[which(plant_stats$year == 2015)] <- plant_stats$month[which(plant_stats$year == 2015)] + 12
+plant_stats$month_index[which(plant_stats$year == 2016)] <- plant_stats$month[which(plant_stats$year == 2016)] + 24
+plant_stats$month_index[which(plant_stats$year == 2017)] <- plant_stats$month[which(plant_stats$year == 2017)] + 36
+
+#Filter out plants that are from December 2017, because this is an error
+plant_stats <- filter(plant_stats, month_index < 47)
+
+```
+
+
+```{r}
+
+#Calculate the harvest statistics for each year
+harvest_stats <- plant_stats %>% group_by(year) %>% summarize(plants = length(plantid), wet_weight = sum(wet_weight),
+                                                              dry_weight = sum(dry_weight),opm_weight = sum(opm_weight),
+                                                              per_plant = dry_weight / length(plantid))
+
+```
+
+
+
+```{r}
+
+
+#Calculate the ratio of production in the last two months of 2016
+plant_stats_ratio <- filter(plant_stats, year %in% c(2016, 2017))
+
+#Calculate the proportion of the year's weight that came in the last two months
+oct_total <- filter(plant_stats_ratio, month <= 10, year == 2016) %>% group_by(location) %>% summarize(oct_wet_total = sum(wet_weight), oct_dry_total = sum(dry_weight))
+dec_total <- filter(plant_stats_ratio, month > 10, year == 2016) %>% group_by(location) %>% summarize(dec_wet_total = sum(wet_weight), dec_dry_total = sum(dry_weight))
+
+ratio_2016 <- merge(oct_total, dec_total, by = 'location', all = T)
+ratio_2016[is.na(ratio_2016)] <- 1
+
+ratio_2016$wet_ratio <- ratio_2016$dec_wet_total / ratio_2016$oct_wet_total
+ratio_2016$dry_ratio <- ratio_2016$dec_dry_total / ratio_2016$oct_dry_total
+ratio_2016$wet_ratio[which(ratio_2016$wet_ratio < .15/.85)] <- .15/.85
+ratio_2016$wet_ratio[which(ratio_2016$wet_ratio > .4/.6)] <- .4/.6
+ratio_2016$dry_ratio[which(ratio_2016$dry_ratio < .15/.85)] <- .15/.85
+ratio_2016$dry_ratio[which(ratio_2016$dry_ratio > .4/.6)] <- .4/.6
+
+#Merge the ratios into the plants data set
+plant_stats_2017 <- merge(filter(plant_stats, year == 2017), select(ratio_2016, location, wet_ratio, dry_ratio), by = 'location')
+
+```
+
+
+
+```{r}
+
+#Calculate 2017 projections
+projection_2017 <- plant_stats_2017 %>% group_by(location, wet_ratio, dry_ratio) %>%
+                          summarize(n_plants = length(plantid), wet_weight = sum(wet_weight), 
+                                    dry_weight = sum(dry_weight))
+
+#The proportion of production from 2016 that occurred in the last two months of the year
+projection_2017$wet_weight <- projection_2017$wet_weight * (1 + projection_2017$wet_ratio)
+projection_2017$dry_weight <- projection_2017$dry_weight * (1 + projection_2017$dry_ratio)
+
+```
+
+
+```{r}
+
+#Build the row of harvest stats for the 2017 projections
+projection_2017 <- projection_2017 %>% group_by() %>% summarize(year = '2017 proj.', plants = 2108767 * 7/6, wet_weight = sum(wet_weight), dry_weight = sum(dry_weight), opm_weight = 86711469 * 7/6, per_plant = dry_weight / plants)
+
+#Add the new row to harvest stats table
+harvest_stats <- rbind(harvest_stats, projection_2017)
+
+```
+
+
+
+```{r}
+
+#Write ouput
+write.csv(harvest_stats, '~/harvest stats.csv', row.names = FALSE)
+
+```
+
+
+```{r}
+
+#Display table
+kable(harvest_stats, digits = c(rep(0,5), 1), col.names = c("Year", "No. Plants", "Wet weight (g)", "Dry Weight (g)", "OPM Weight (g)", "Yield per Plant (g)"), align = 'c')
+
+
+```
+
