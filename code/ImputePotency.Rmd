@@ -1,0 +1,547 @@
+---
+title: "Estimate mgTHC (Edible and non-Edible)"
+author: "Steven Davenport"
+date: "`r format(Sys.time(), '%d %B, %Y %H:%M(%S)')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+---
+
+This comes from a document originally written by Anhvinh Doanvo. It will impute edible potency in the style used by the CMU team.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, messages=FALSE, warnings = FALSE)
+options(scipen = 7)
+library(plyr); library(tidyverse)
+library(knitr); library(glmnet); library(randomForest); library(tm)
+library(qdap); library(ranger)
+source("CMU_code_share_av.R") #Import "search_productname(arg)", where arg = inventory product name
+
+# load edibles data
+# "../data/ediblesFY1617sample100k.csv"
+edibles <- read.csv("../data/ediblesAlltimeSample200k.csv") 
+
+# Data on size of table in BigQuery (for scaling to population)
+# FOR 2017 DATA
+n_edible_rows <- 4972181 # total number of rows in edible table from BigQuery for 2017
+n_solid_rows <- 4004175 # 22
+n_liquid_rows <- 968006 # 23
+
+# FOR FY 2017 (july 1 2016 - june 30 2017)
+#???
+#???
+#???
+
+# all-time
+n_solid_rows <- 8487415 # 22
+n_liquid_rows <- 2150470 # 23
+n_edible_rows <-  n_solid_rows + n_liquid_rows
+```
+
+# Parameters
+
+```{r parameters, echo = TRUE}
+divisor <- 10 # scaleability parameter
+n_sample_obs <- nrow(edibles) / divisor # number of obs to sample from all edibles from SQL export
+```
+
+# Census Data
+
+```{r calculate income index, echo = F}
+censusdata <- read.csv("../data/biotrackthc_locations_cenus_joined.csv") # Steve's directory
+
+# This calculates average income by census tract
+censusdata$avgincome <- (censusdata$X19_INCOME_B19001e2 * 5000 +
+censusdata$X19_INCOME_B19001e3 * 12500 +
+censusdata$X19_INCOME_B19001e4 * 17500 +
+censusdata$X19_INCOME_B19001e5 * 22500 +
+censusdata$X19_INCOME_B19001e6 * 27500 +
+censusdata$X19_INCOME_B19001e7 * 32500 +
+censusdata$X19_INCOME_B19001e8 * 37500 +
+censusdata$X19_INCOME_B19001e9 * 42500 +
+censusdata$X19_INCOME_B19001e10 * 47500 +
+censusdata$X19_INCOME_B19001e11 * 55000 +
+censusdata$X19_INCOME_B19001e12 * 67500 +
+censusdata$X19_INCOME_B19001e13 * 87500 +
+censusdata$X19_INCOME_B19001e14 * 112500 +
+censusdata$X19_INCOME_B19001e15 * 137500 +
+censusdata$X19_INCOME_B19001e16 * 175000) / (censusdata$X19_INCOME_B19001e2 +
+censusdata$X19_INCOME_B19001e3 +
+censusdata$X19_INCOME_B19001e4 +
+censusdata$X19_INCOME_B19001e5 +
+censusdata$X19_INCOME_B19001e6 +
+censusdata$X19_INCOME_B19001e7 +
+censusdata$X19_INCOME_B19001e8 +
+censusdata$X19_INCOME_B19001e9 +
+censusdata$X19_INCOME_B19001e10 +
+censusdata$X19_INCOME_B19001e11 +
+censusdata$X19_INCOME_B19001e12 +
+censusdata$X19_INCOME_B19001e13 +
+censusdata$X19_INCOME_B19001e14 +
+censusdata$X19_INCOME_B19001e15 +
+censusdata$X19_INCOME_B19001e16) #for lower incomes, get average estimated
+
+# This gets percent of population in top bracket
+censusdata$pcttopbracket <- censusdata$X19_INCOME_B19001e17 / (censusdata$X19_INCOME_B19001e2 +
+censusdata$X19_INCOME_B19001e3 +
+censusdata$X19_INCOME_B19001e4 +
+censusdata$X19_INCOME_B19001e5 +
+censusdata$X19_INCOME_B19001e6 +
+censusdata$X19_INCOME_B19001e7 +
+censusdata$X19_INCOME_B19001e8 +
+censusdata$X19_INCOME_B19001e9 +
+censusdata$X19_INCOME_B19001e10 +
+censusdata$X19_INCOME_B19001e11 +
+censusdata$X19_INCOME_B19001e12 +
+censusdata$X19_INCOME_B19001e13 +
+censusdata$X19_INCOME_B19001e14 +
+censusdata$X19_INCOME_B19001e15 +
+censusdata$X19_INCOME_B19001e16 +
+censusdata$X19_INCOME_B19001e17) # for very high-income indivduals, just grab percentage in that bracket
+
+store_incomes <- data.frame(store_loc = censusdata$ID,
+                           avgincome = censusdata$avgincome,
+                           pcttopbracket = censusdata$pcttopbracket)
+
+# de-duplicate; take average for stores w multiple locations
+store_incomes <- store_incomes[!duplicated(store_incomes),]
+store_avg_income <- aggregate(avgincome ~ store_loc, 
+                          data = store_incomes,
+                          FUN = mean)
+store_top_pct <- aggregate(pcttopbracket ~ store_loc, 
+                          data = store_incomes,
+                          FUN = mean)
+
+
+store_incomes <- merge(x = store_avg_income, y = store_top_pct, by = "store_loc")  # NOT inv_location
+rm(store_avg_income)
+rm(store_top_pct)
+##NEED TO CHECK THIS WORK
+
+```
+
+Census data was downloaded from [this source](https://www.census.gov/geo/maps-data/data/tiger-data.html). I selected the 2015 "detailed tables" for the Washington State block group. The "X19_INCOME" table was table-joined to the "ACS_2015_5YR_BG_53_WASHINGTON" shapefile using X19's GEOID and ACS's GEOID_Data fields. Furthermore, the stores identified in the biotrackthc_locations table were geocoded using their latitude and longitudinal coordinates.
+
+These stores were spatial-joined to their associated census tract to relate them to demographic data of their surrounding region. Using this data, an 'income index' was calculated for each store by compositing counts of individuals in each income bracket per store in each census tract. The data coding information sourced from the American Community Survey is in a code chunk in this rmd file.
+
+# Edibles
+
+## Prep Data
+
+```{r prep edibles data}
+# Load random sample of edible observations
+edibles <- edibles %>%
+  
+  # Sample for computational speed
+  dplyr::sample_n(n_sample_obs) %>%
+  
+  # Parse saletime and interaction term for price * saletime
+  mutate(sale_time = as.numeric(as.POSIXct(as.character(sale_time))), 
+         pricetime = (sale_time - mean(sale_time)) * price_x) %>% # TODO: isn't this unnecessary in an RF?
+  
+  
+  # Remove rows with blank THC/date/inventorytype
+  filter(!is.na(Potency_THC),
+         !is.na(sale_time),
+         !is.na(inventorytype))
+
+# merge on census data (store income)
+edibles <- edibles %>%
+  left_join(store_incomes)
+
+# Topcode THC values
+# This does not affect anything as you shouldn't be using this column. TODO: delete?
+edibles$Potency_THC <- ifelse(edibles$Potency_THC > 100, 100, edibles$Potency_THC)
+
+# get MG THC from label where available 
+edibles <- edibles %>%
+  # Add mgTHC estimates
+  mutate(mgTHC = weight * 
+           search_productname(edibles$inv_productname)$mg_text_max %>% 
+           # topcode @ 500mg THC (medical market maximum)
+           ifelse(. > 500, 500, .)) 
+
+# partition to THC- and CBD-dominant edibles
+# TODO: REMOVE AS THE CBD is not being correctly estimated??
+edibles_CBD <- edibles %>% filter(Potency_CBD > Potency_THC)
+edibles <- edibles %>% filter(Potency_CBD <= Potency_THC)
+
+# Partition to liquid and solid edibles
+edibles_liq <- edibles %>% filter(inventorytype == 23)
+edibles_sol <- edibles %>% filter(inventorytype == 22)
+
+# TODO: fix scale variable to adjust for portion of non-THC dominant edibles
+```
+
+## Visualize mgTHC and Price
+
+```{r plot}
+# big picture including 500
+# ggplot(edibles, aes(x = mgTHC)) +
+#   geom_histogram() +
+#   facet_grid(.~ inventorytype)
+
+ggplot(edibles, aes(x = mgTHC)) +
+  geom_histogram() +
+  facet_grid(.~ inventorytype) + xlim(c(0, 100)) +
+  labs(title="Distribution mgTHC")
+
+ggplot(edibles, aes(y = price_x, x = mgTHC)) +
+  geom_point(alpha = 0.1) +
+  facet_grid(.~ inventorytype) +
+  coord_cartesian(x = c(0, 100), y = c(0, 100)) +
+  stat_smooth() +
+  labs(title="Price v mgTHC")
+```
+
+## Implement RF
+
+```{r TFIDFfunction, include=FALSE}
+#key dataframes: edibles_liq, edibles_sol
+library(tm)
+library(qdap)
+
+#Converts product name vector to docterm matrix (TF-IDF normalization)
+names_DocTermMatrix <- function (productnames1) {
+  productnames <- gsub("([0-9])", "\\1 ", as.character(productnames1)) #add space betw numbers
+  productnames <- gsub("[][!#$%()*,.:;<=>@^_|~.{}''']", " ", productnames) #space btw punctuation
+  productnames <- removeNumbers(productnames)
+  productnames <- tolower(productnames)
+  productnames <- replace_symbol(productnames)
+  productnames <- removePunctuation(productnames)
+
+  productnames <- removeWords(productnames, c("oz", "mg")) #remove stopwords
+
+  productnames <- stripWhitespace(productnames) # do this last as things are deleted
+  productnames <- trimws(productnames, which = c("both", "left", "right")) #trim ends
+
+  #productnames_DTM <- DocumentTermMatrix(Corpus(VectorSource(productnames)))
+
+  #calculate tf idf matrix
+  productnames_DTM <- DocumentTermMatrix(Corpus(VectorSource(productnames)),
+                                              control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+
+  productnames_DTM <- as.data.frame(as.matrix(productnames_DTM))
+  return(productnames_DTM)
+}
+```
+
+```{r RFfunction, include=FALSE}
+# starting values for parameters
+
+estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
+  
+  # Declare parameters for extrapolation from sample to population
+  n_sample <- nrow(data) # Find number of observations in data
+  n_pop <- ifelse(unique(data$inventorytype)==23, n_liquid_rows, n_solid_rows) # Liquid (23) is smaller, solid(22) is bigger
+  
+  # Make TF-IDF matrix and get PCAs
+  tfidf <- names_DocTermMatrix(data$inv_productname) # Compute PCAs
+  tfidf_pca <- prcomp(tfidf) # don't scale; keep IDF weightings
+  tfidf <- tfidf_pca$x[, 1:n_pc] # Select n PCs (for speed)
+  
+  # Add TF-IDF features to data
+  data <- data %>% # Variables used on RHS include:
+    select(
+      sale_time,
+      price_x,
+      pricetime, # interaction b/w price * sales
+      # weight, # quantity
+      mgTHC, # mgTHC from label
+      store_loc, # storeID
+      avgincome, # avg income in store's tract
+      pcttopbracket # percent of pop in top income bracket in store's tract
+    ) %>%
+    cbind(tfidf) # Add on TFIDF matrix
+  
+  # Separate to train and test
+  train <- data %>% filter(!is.na(mgTHC))
+  test <- data %>% filter(is.na(mgTHC))
+  
+  ##### Implement RF without cv
+  RF <- randomForest(mgTHC ~.,
+                     data = train,
+                     ntree = n_tree)
+  # Get predictions from RF
+  test$pred <- predict(RF, test)
+  test <- test %>%
+    mutate(year = lubridate::year(as.POSIXct(sale_time, origin='1970-01-01')),
+           month =  lubridate::month(as.POSIXct(sale_time, origin='1970-01-01')))
+
+  ##### Implement RF with cv
+  # Prep for k-fold cross-validated RF
+  train$partition <- sample(1:n_cv_folds, nrow(train), replace=TRUE)
+  
+  results_cv <- list()
+  
+  if(cv) {
+    # Implement k-fold Random Forests
+    for (k in 1:n_cv_folds){
+      
+      # Separate to training/test
+      traincv <- train[train$partition != k, ]
+      testcv <- train[train$partition == k, ]
+    
+      # implement RF with k-fold cv and n_tree trees
+      # train error drastically decreases by ntree 100, and more so at ntree 250
+      RF <- randomForest(mgTHC ~.,
+                         data = traincv %>% select(-partition),
+                         ntree = n_tree) 
+      
+      # add predictions from test data
+      testcv$pred <- predict(RF, testcv)
+    
+      # Summarize results
+      results_cv$meanError[k] <- mean(abs(testcv$pred - testcv$mgTHC))
+    }
+  }
+  
+  # Final results
+  output_results <- list()
+  
+  output_results$alltime <-
+    c('samplekgTHC' = sum(test$pred) / 1e6, # estimated in sample (all THC > CBD from 100k query)
+      'populationkgTHC' = sum(test$pred) * n_pop / n_sample / 1e6, # after scaling up (assumes no CBD>THC, which must be fixed)
+      'cvmeanerror' = ifelse(cv, mean(results_cv$meanError), NA))
+    
+  # Final results by year-month
+  output_results$monthly <-
+    test %>%
+      group_by(year, month) %>%
+      summarise(samplekgTHC = sum(pred) / 1e6,
+                popkgTHC = samplekgTHC * n_pop / n_sample)
+  
+  output_results
+}
+```
+
+```{r liquidRF, echo = TRUE}
+cat("Liquid Edibles")
+# undebug(estTHC_RFcv)
+# debug(estTHC_RFcv)
+# divisor <- 10
+
+liq_est <- estTHC_RFcv(data = edibles_liq,
+            n_pc = 200 / divisor, # orig 294
+            n_cv_folds = 5, # orig: 5
+            n_tree = 200 / divisor, # orig: 200
+            cv=TRUE
+  )
+
+ggplot(data=liq_est$monthly) +
+  geom_col(aes(x=month, y=popkgTHC)) + facet_wrap(~year) +
+  labs(title='kg THC from liquid edibles')
+
+liq_est$alltime
+```
+
+```{r solidRF}
+cat("solid Edibles")
+sol_est <- estTHC_RFcv(data = edibles_sol,
+            n_pc = 300 , # orig 294
+            n_cv_folds = 5, # orig: 5
+            n_tree = 200, # orig: 200
+            cv=TRUE
+)
+
+sol_est$alltime
+
+ggplot(sol_est$monthly) +
+  geom_col(aes(x=month, y=popkgTHC)) + facet_wrap(~year) +
+  labs(title='kg THC from solid edibles')
+```
+
+# Non-edibles 
+
+```{r, eval=FALSE}
+# Get potency totals from non-edibles
+#query: getkgTHCCBDretail
+========
+SELECT month, year, invtype,
+  sum(totalthc * usableweight) * 10 / 1000000 as kgTHC,
+  sum(totalcbd * usableweight) * 10 / 1000000 as kgCBD
+FROM(
+  SELECT
+    thc+0.877*thca AS totalthc,
+    CASE
+      WHEN cbda is null THEN cbd
+      ELSE cbd+0.877*cbda END AS totalcbd,
+    invtype,
+    usableweight,
+    month,
+    year
+  FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+  WHERE invtype not IN ("Liquid Marijuana Infused Edible", "Solid Marijuana Infused Edible"))
+GROUP BY year, month, invtype
+========
+```
+
+```{r}
+nonedible <- read.csv("../data/kgTHCCBDretailnonedible.csv")
+ggplot(nonedible,
+       aes(x=month, y=kgTHC)) + geom_col() + facet_wrap(~year)
+
+```
+
+```{r}
+edibles_combined <- bind_rows(list(
+  liq_est$monthly %>% select(month, year, kgTHC =popkgTHC) %>% mutate(invtype="Liquid Edibles", kgCBD= NA),
+  sol_est$monthly %>% select(month, year, kgTHC =popkgTHC) %>% mutate(invtype="Solid Edibles", kgCBD= NA)))
+
+ggplot(edibles_combined, aes(x=month, y=kgTHC, fill=invtype)) +
+  geom_col() + facet_grid(~year) +
+  labs(title='kgTHC sold (edibles)')
+
+combined <- 
+  bind_rows(
+  list(
+    nonedible %>% select(month, year, invtype, kgTHC, kgCBD),
+    edibles_combined))
+
+ggplot(combined, aes(x=month, y=kgTHC, fill=invtype)) +
+  geom_col() + facet_grid(~year) +
+  labs(title='kgTHC sold')
+
+    
+```
+
+
+
+```{r, eval=FALSE, include=FALSE}
+B19001e2	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): Less than $10,000: Households -- (Estimate)
+B19001m2	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): Less than $10,000: Households -- (Margin of Error)
+B19001e3	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $10,000 to $14,999: Households -- (Estimate)
+B19001m3	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $10,000 to $14,999: Households -- (Margin of Error)
+B19001e4	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $15,000 to $19,999: Households -- (Estimate)
+B19001m4	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $15,000 to $19,999: Households -- (Margin of Error)
+B19001e5	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $20,000 to $24,999: Households -- (Estimate)
+B19001m5	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $20,000 to $24,999: Households -- (Margin of Error)
+B19001e6	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $25,000 to $29,999: Households -- (Estimate)
+B19001m6	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $25,000 to $29,999: Households -- (Margin of Error)
+B19001e7	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $30,000 to $34,999: Households -- (Estimate)
+B19001m7	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $30,000 to $34,999: Households -- (Margin of Error)
+B19001e8	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $35,000 to $39,999: Households -- (Estimate)
+B19001m8	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $35,000 to $39,999: Households -- (Margin of Error)
+B19001e9	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $40,000 to $44,999: Households -- (Estimate)
+B19001m9	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $40,000 to $44,999: Households -- (Margin of Error)
+B19001e10	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $45,000 to $49,999: Households -- (Estimate)
+B19001m10	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $45,000 to $49,999: Households -- (Margin of Error)
+B19001e11	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $50,000 to $59,999: Households -- (Estimate)
+B19001m11	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $50,000 to $59,999: Households -- (Margin of Error)
+B19001e12	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $60,000 to $74,999: Households -- (Estimate)
+B19001m12	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $60,000 to $74,999: Households -- (Margin of Error)
+B19001e13	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $75,000 to $99,999: Households -- (Estimate)
+B19001m13	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $75,000 to $99,999: Households -- (Margin of Error)
+B19001e14	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $100,000 to $124,999: Households -- (Estimate)
+B19001m14	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $100,000 to $124,999: Households -- (Margin of Error)
+B19001e15	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $125,000 to $149,999: Households -- (Estimate)
+B19001m15	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $125,000 to $149,999: Households -- (Margin of Error)
+B19001e16	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $150,000 to $199,999: Households -- (Estimate)
+B19001m16	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $150,000 to $199,999: Households -- (Margin of Error)
+B19001e17	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $200,000 or more: Households -- (Estimate)
+B19001m17	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOLLARS): $200,000 or more: Households -- (Margin of Error)
+```
+
+
+
+# Appendix
+
+## Query for MJ edible export
+```{r, eval=FALSE}
+# TABLE: Edibles2017; query: imputedEdibles2017
+SELECT store_loc,  thc, thca, cbd, cbda,
+  inv_productname, transactionid, #maybe useful for basket analysis?
+  sale_time, weight, usableweight, inventorytype, price_x, gram_price_x,
+  invtype
+
+FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+WHERE invtype IN ('Solid Marijuana Infused Edible', 'Liquid Marijuana Infused Edible')
+AND sale_time > cast('2017-01-01 00:00:00.00 UTC' as timestamp)
+==========================================
+
+# SECOND QUERY: TABLE: Edibles2017pt2; query: imputeEdibles2017pt2
+SELECT (thc + (0.877 * thca)) AS Potency_THC,
+  (cbd + (cbda *  (0.877)) AS Potency_CBD,
+  inv_productname, transactionid,
+  sale_time, weight,
+  #usableweight #note: no useable weights here
+  inventorytype, #22 = solid; 23 = liquid,
+  price_x,
+  #gram_price_x, #no usable weights here,
+  #invtype #note: abbreviated in inventorytype
+  store_loc
+
+FROM [rand-systems:full_WA_data__proper.edibles2017]
+
+# THIRD QUERY: get random sample
+=======Random Sampling
+SELECT *
+FROM [rand-systems:full_WA_data__proper.edibles2017step2]
+WHERE RAND() < 100000/4972181  #format: rough number of rows desired / total rows in table
+
+#this gets approximate random sample with scalable code
+```
+
+
+
+<!-- # Edible CBD Products -->
+
+<!-- **TO DO: This is a little more complicated here. Need to estimate usable weight, NOT CBD/THC content directly. THEN use this to get THC content.** -->
+
+<!-- ## Liquids -->
+
+<!-- ```{r} -->
+<!-- edibles_cbd_liq <- edibles_CBD[edibles_CBD$inventorytype == 23,] -->
+
+<!-- #train model -->
+<!-- edibles_cbd_liq_train <- edibles_cbd_liq  %>% filter(!is.na(mgTHC)) -->
+<!-- edibles_cbd_liq.lm <- lm(mgTHC ~ price_x + pricetime, edibles_cbd_liq_train) -->
+<!-- #estimate -->
+<!-- edibles_cbd_liq_impute <- edibles_cbd_liq  %>% filter(1is.na(mgTHC)) -->
+<!-- edibles_cbd_liq_impute$mgTHC <- predict(edibles_cbd_liq.lm, edibles_cbd_liq_impute) -->
+
+<!-- summary(edibles_cbd_liq.lm) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- edibles_cbd_liq_summary <- data.frame(type = as.character(), mgCBD = as.numeric(), sd = as.numeric()) -->
+
+<!-- edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, -->
+<!--                              data.frame(type = "Training", mgCBD = sum(edibles_cbd_liq_train$mgTHC), sd = sd(edibles_cbd_liq_train$mgTHC) / (nrow(edibles_cbd_liq_train) ^ 0.5))) -->
+
+<!-- edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, -->
+<!--                              data.frame(type = "Imputed", mgCBD = sum(edibles_cbd_liq_impute$mgTHC), sd = sd(edibles_cbd_liq_impute$mgTHC) / (nrow(edibles_cbd_liq_impute) ^ 0.5))) -->
+
+<!-- kable(cbind(edibles_cbd_liq_summary[,1], (edibles_cbd_liq_summary[,2:3])* n_edible_rows / 100000)) -->
+<!-- ``` -->
+
+<!-- ## Solids -->
+
+<!-- ```{r} -->
+<!-- edibles_cbd_sol <- edibles_CBD[edibles_CBD$inventorytype == 22,] -->
+
+<!-- #train model -->
+<!-- edibles_cbd_sol_train <- edibles_cbd_sol  %>% filter(!is.na(mgTHC)) -->
+<!-- edibles_cbd_sol.lm <- lm(mgTHC ~ price_x + pricetime, edibles_cbd_sol_train) -->
+<!-- #estimate -->
+<!-- edibles_cbd_sol_impute <- edibles_cbd_sol %>% filter(!is.na(mgTHC)) -->
+<!-- edibles_cbd_sol_impute$mgTHC <- predict(edibles_cbd_sol.lm, edibles_cbd_sol_impute) -->
+
+
+<!-- summary(edibles_cbd_sol.lm ) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- edibles_cbd_sol_summary <- data.frame(type = as.character(), mgCBD = as.numeric(), sd = as.numeric()) -->
+
+<!-- edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, -->
+<!--                              data.frame(type = "Training", mgCBD = sum(edibles_cbd_sol_train$mgTHC), sd = sd(edibles_cbd_sol_train$mgTHC) / (nrow(edibles_cbd_sol_train) ^ 0.5))) -->
+
+<!-- edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, -->
+<!--                              data.frame(type = "Imputed", mgCBD = sum(edibles_cbd_sol_impute$mgTHC), sd = sd(edibles_cbd_sol_impute$mgTHC) / (nrow(edibles_cbd_sol_impute) ^ 0.5))) -->
+
+<!-- kable(cbind(edibles_cbd_sol_summary[,1], (edibles_cbd_sol_summary[,2:3])* n_edible_rows / 100000)) -->
+
+<!-- ``` -->
