@@ -12,42 +12,38 @@ output:
 This comes from a document originally written by Anhvinh Doanvo. It will impute edible potency in the style used by the CMU team.
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, messages=FALSE, warnings = FALSE)
+knitr::opts_chunk$set(echo = TRUE, messages=FALSE, warnings = FALSE, warning = FALSE)
 options(scipen = 7)
 library(plyr); library(tidyverse)
 library(knitr); library(glmnet); library(randomForest); library(tm)
 library(qdap); library(ranger)
 source("CMU_code_share_av.R") #Import "search_productname(arg)", where arg = inventory product name
-
-# load edibles data
-# "../data/ediblesFY1617sample100k.csv"
-edibles <- read.csv("../data/ediblesAlltimeSample200k.csv") 
-
-# Data on size of table in BigQuery (for scaling to population)
-# FOR 2017 DATA
-n_edible_rows <- 4972181 # total number of rows in edible table from BigQuery for 2017
-n_solid_rows <- 4004175 # 22
-n_liquid_rows <- 968006 # 23
-
-# FOR FY 2017 (july 1 2016 - june 30 2017)
-#???
-#???
-#???
-
-# all-time
-n_solid_rows <- 8487415 # 22
-n_liquid_rows <- 2150470 # 23
-n_edible_rows <-  n_solid_rows + n_liquid_rows
 ```
 
 # Parameters
 
+This informs us about the time frame we are looking at.
+
 ```{r parameters, echo = TRUE}
-divisor <- 10 # scaleability parameter
-n_sample_obs <- nrow(edibles) / divisor # number of obs to sample from all edibles from SQL export
+divisor <- 2 # scaleability parameter; sets sample size.
+
+# all-time - These row counts come from the entire SQL table (not just what is imported to R)
+n_solid_rows <- 8487415 # 22 # verified sept 24
+n_liquid_rows <- 2150470 # 23 # verified sept 24
+n_edible_rows <-  n_solid_rows + n_liquid_rows
+
+
+# Import random sample of edibles table
+edibles <- read.csv("../data/ediblesAlltimeSample200k.csv")  # Load dataset: all time
+rows_sampled_sql <- nrow(edibles) # number of rows in our SQL parameter
+n_sample_obs <- rows_sampled_sql / divisor # number of obs to sample from all edibles from SQL export
 ```
 
-# Census Data
+# Prep Census Data
+
+Census data was downloaded from [this source](https://www.census.gov/geo/maps-data/data/tiger-data.html). I selected the 2015 "detailed tables" for the Washington State block group. The "X19_INCOME" table was table-joined to the "ACS_2015_5YR_BG_53_WASHINGTON" shapefile using X19's GEOID and ACS's GEOID_Data fields. Furthermore, the stores identified in the biotrackthc_locations table were geocoded using their latitude and longitudinal coordinates.
+
+These stores were spatial-joined to their associated census tract to relate them to demographic data of their surrounding region. Using this data, an 'income index' was calculated for each store by compositing counts of individuals in each income bracket per store in each census tract. The data coding information sourced from the American Community Survey is in a code chunk in this rmd file.
 
 ```{r calculate income index, echo = F}
 censusdata <- read.csv("../data/biotrackthc_locations_cenus_joined.csv") # Steve's directory
@@ -122,13 +118,9 @@ rm(store_top_pct)
 
 ```
 
-Census data was downloaded from [this source](https://www.census.gov/geo/maps-data/data/tiger-data.html). I selected the 2015 "detailed tables" for the Washington State block group. The "X19_INCOME" table was table-joined to the "ACS_2015_5YR_BG_53_WASHINGTON" shapefile using X19's GEOID and ACS's GEOID_Data fields. Furthermore, the stores identified in the biotrackthc_locations table were geocoded using their latitude and longitudinal coordinates.
-
-These stores were spatial-joined to their associated census tract to relate them to demographic data of their surrounding region. Using this data, an 'income index' was calculated for each store by compositing counts of individuals in each income bracket per store in each census tract. The data coding information sourced from the American Community Survey is in a code chunk in this rmd file.
-
 # Edibles
 
-## Prep Data
+## Prep/Describe Edible Data
 
 ```{r prep edibles data}
 # Load random sample of edible observations
@@ -138,68 +130,189 @@ edibles <- edibles %>%
   dplyr::sample_n(n_sample_obs) %>%
   
   # Parse saletime and interaction term for price * saletime
-  mutate(sale_time = as.numeric(as.POSIXct(as.character(sale_time))), 
-         pricetime = (sale_time - mean(sale_time)) * price_x) %>% # TODO: isn't this unnecessary in an RF?
+  mutate(date = as.POSIXct(as.character(sale_time), origin='1970-01-01'),
+         sale_time = as.numeric(as.POSIXct(as.character(sale_time))),
+         pricetime = (sale_time - mean(sale_time)) * price_x,
+         year = lubridate::year(date),
+         month = lubridate::month(date),
+         invtype = ifelse(inventorytype==22, "Solid Edible", "Liquid Edible"),
+         
+         # Add mgTHC estimates
+         mgTHC = (search_productname(inv_productname)$mg_text_max %>% 
+                    # topcode @ 500mg THC per unit (medical market maximum)
+                    ifelse(. > 500, 500, .) * 
+                    # multiply by # units
+                    weight),
+         
+         # Top-code the THC/CBD fields
+         # Note: these vars aren't used in models, just to determine THC or CBD-dominant
+         Potency_THC = ifelse(Potency_THC > 100, 100, Potency_THC),
+         Potency_CBD = ifelse(Potency_CBD > 100, 100, Potency_CBD)) %>%
   
-  
-  # Remove rows with blank THC/date/inventorytype
-  filter(!is.na(Potency_THC),
-         !is.na(sale_time),
-         !is.na(inventorytype))
-
-# merge on census data (store income)
-edibles <- edibles %>%
+  # merge on census data (store income)
   left_join(store_incomes)
 
-# Topcode THC values
-# This does not affect anything as you shouldn't be using this column. TODO: delete?
-edibles$Potency_THC <- ifelse(edibles$Potency_THC > 100, 100, edibles$Potency_THC)
+# Basic summary stats
+edibles %>% 
+  group_by(year) %>%
+  summarise(n_rows = n(),
+            weight = sum(weight),
+            THC_value_mean = mean(Potency_THC, na.rm=T),
+            CBD_value_mean = mean(Potency_CBD, na.rm=T),
+            price_x = mean(price_x, na.rm=T)) %>%
+  kable(caption="Summary info", digits=2)
 
-# get MG THC from label where available 
-edibles <- edibles %>%
-  # Add mgTHC estimates
-  mutate(mgTHC = weight * 
-           search_productname(edibles$inv_productname)$mg_text_max %>% 
-           # topcode @ 500mg THC (medical market maximum)
-           ifelse(. > 500, 500, .)) 
+# Validate different types of missingness.
+edibles %>% 
+  group_by(year) %>%
+  summarise(date_na = sum(is.na(date)),
+            THC_na = sum(is.na(Potency_THC)),
+            CBD_na = sum(is.na(Potency_CBD)),
+            weight_na = sum(is.na(weight)),
+            label_na = sum(is.na(inv_productname) | inv_productname=="")) %>%
+  kable(caption="Missingness in the sample dataset", digits=2)
 
-# partition to THC- and CBD-dominant edibles
-# TODO: REMOVE AS THE CBD is not being correctly estimated??
-edibles_CBD <- edibles %>% filter(Potency_CBD > Potency_THC)
-edibles <- edibles %>% filter(Potency_CBD <= Potency_THC)
-
-# Partition to liquid and solid edibles
-edibles_liq <- edibles %>% filter(inventorytype == 23)
-edibles_sol <- edibles %>% filter(inventorytype == 22)
-
-# TODO: fix scale variable to adjust for portion of non-THC dominant edibles
 ```
 
-## Visualize mgTHC and Price
+## ID THC v CBD dominant products
 
-```{r plot}
-# big picture including 500
-# ggplot(edibles, aes(x = mgTHC)) +
-#   geom_histogram() +
-#   facet_grid(.~ inventorytype)
+```{r THCvCBD}
+# Let us define CBD products if CBD > THC or label contains THC; otherwise, it will be THC
+edibles <- edibles %>%
+  mutate(dominant_unknown = is.na(Potency_CBD) & is.na(Potency_THC) & !str_detect(inv_productname, '(?i)CBD'),
+         dominant = case_when(dominant_unknown ~ "THC",
+                              str_detect(inv_productname, "(?i)CBD") | Potency_CBD > Potency_THC ~ "CBD",
+                              TRUE ~ "THC"))
 
-ggplot(edibles, aes(x = mgTHC)) +
+# Validate THC v CBD products
+edibles %>% 
+  filter(invtype=="Liquid Edible") %>%
+  group_by(year) %>%
+  summarise(labeled_CBD = sum(str_detect(inv_productname, "(?i)CBD")),
+            cbd_exceeds_thc = sum(Potency_CBD > Potency_THC, na.rm=T),
+            `categorizedCBD(either)` = sum(str_detect(inv_productname, "(?i)CBD") | (Potency_CBD > Potency_THC), na.rm=T),
+            categorizedTHC = sum(dominant=='THC'),
+            total = n(),
+            uncategorized = total-categorizedTHC-`categorizedCBD(either)`,
+            pct_THC = categorizedTHC / total
+            ) %>%
+  kable(caption="Liquid edibles: THC v CBD dominant products", digits=2)
+
+# Validate THC v CBD products
+edibles %>% 
+  filter(invtype=="Solid Edible") %>%
+  group_by(year) %>%
+  summarise(labeled_CBD = sum(str_detect(inv_productname, "(?i)CBD")),
+            cbd_exceeds_thc = sum(Potency_CBD > Potency_THC, na.rm=T),
+            `categorizedCBD(either)` = sum(str_detect(inv_productname, "(?i)CBD") | (Potency_CBD > Potency_THC), na.rm=T),
+            categorizedTHC = sum(dominant=='THC'),
+            total = n(),
+            uncategorized = total-categorizedTHC-`categorizedCBD(either)`,
+            pct_THC = categorizedTHC / total
+            ) %>%
+  kable(caption="Solid Edibles: THC v CBD dominant products", digits=2)
+
+
+# Point estimate for % of liquid/solid that are THC or CBD-dominant
+thc_cbd_prevalence <- edibles %>% 
+  group_by(invtype) %>%
+  summarise(`categorizedCBD(either)` = sum(str_detect(inv_productname, "(?i)CBD") | (Potency_CBD > Potency_THC), na.rm=T),
+            categorizedTHC = sum(dominant=='THC'),
+            total = n(),
+            pct_THC = categorizedTHC / total
+            )
+
+thc_cbd_prevalence %>%
+  kable(caption="Solid Edibles: THC v CBD dominant products", digits=2)
+
+
+# Save constants for scaling up the random forest results
+liq_pct_THC <- thc_cbd_prevalence %>%
+  filter(invtype=="Liquid Edible") %>% .$pct_THC
+
+sol_pct_THC <- thc_cbd_prevalence %>%
+  filter(invtype=="Solid Edible") %>% .$pct_THC
+
+# THC v CBD breakdown, liquid v solids
+edibles %>% 
+  filter(invtype=="Solid Edible") %>%
+  group_by(year, dominant) %>%
+  summarise(num =n(),
+            weight = sum(weight),
+            # THC_value_mean = mean(Potency_THC, na.rm=T),
+            # CBD_value_mean = mean(Potency_CBD, na.rm=T), 
+            mg_mean = mean(mgTHC, na.rm=T),
+            assumed_THC = sum(dominant_unknown)
+            )  %>%
+  kable(caption="Solid edibles: THC v CBD products", digits=2)
+
+
+edibles %>% 
+  filter(invtype=="Liquid Edible") %>%
+  group_by(year, dominant) %>%
+  summarise(num =n(),
+            weight = sum(weight),
+            # THC_value_mean = mean(Potency_THC, na.rm=T),
+            # CBD_value_mean = mean(Potency_CBD, na.rm=T), 
+            mg_mean = mean(mgTHC, na.rm=T),
+            assumed_THC = sum(dominant_unknown)
+            )  %>%
+  kable(caption="Liquid edibles: THC v CBD products", digits=2)
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+message(paste0("rows in edible dataset before filtering for thc/inventorytype/sale time: ", nrow(edibles))) # check num rows
+# edibles <- edibles %>%
+#   # Remove rows with blank THC/date/inventorytype
+#   filter(!is.na(Potency_THC),
+#          !is.na(sale_time),
+#          !is.na(inventorytype)) 
+message(paste0("rows in edible dataset AFTER filtering for thc/inventorytype/sale time: ", nrow(edibles))) # check num rows
+
+```
+
+
+```{r, eval = F}
+edibles %>% filter(dominant=='THC',
+                   year==2015,
+                   invtype=="Solid Edible",
+                   !is.na(Potency_CBD)) 
+```
+
+## Plot mgTHC/CBD and Price
+
+```{r plot, fig.height=2}
+ggplot(edibles %>% filter(dominant=='THC'), aes(x = mgTHC)) +
   geom_histogram() +
-  facet_grid(.~ inventorytype) + xlim(c(0, 100)) +
+  facet_grid(.~ invtype) + xlim(c(0, 100)) +
   labs(title="Distribution mgTHC")
 
-ggplot(edibles, aes(y = price_x, x = mgTHC)) +
+ggplot(edibles %>% filter(dominant=='CBD'), aes(x = mgTHC)) +
+  geom_histogram() +
+  facet_grid(.~ invtype) + xlim(c(0, 100)) +
+  labs(title="CBD: Distribution mg", x='CBD')
+
+ggplot(edibles %>% filter(dominant=='THC'), aes(y = price_x, x = mgTHC)) +
   geom_point(alpha = 0.1) +
-  facet_grid(.~ inventorytype) +
+  facet_grid(.~ invtype) +
   coord_cartesian(x = c(0, 100), y = c(0, 100)) +
   stat_smooth() +
   labs(title="Price v mgTHC")
+
 ```
+
 
 ## Implement RF
 
 ```{r TFIDFfunction, include=FALSE}
-#key dataframes: edibles_liq, edibles_sol
+#key dataframes: e %>% filter(dominant=='CBD'), edibles %>% filter(dominant=='THC', invtype=='Solid Edible')
 library(tm)
 library(qdap)
 
@@ -233,17 +346,30 @@ names_DocTermMatrix <- function (productnames1) {
 
 estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
   
+  # Remove missingness
+  data_nomissing <- data %>% 
+    filter(!is.na(sale_time),
+           !is.na(avgincome)) # sometimes this is missing
+  
   # Declare parameters for extrapolation from sample to population
-  n_sample <- nrow(data) # Find number of observations in data
-  n_pop <- ifelse(unique(data$inventorytype)==23, n_liquid_rows, n_solid_rows) # Liquid (23) is smaller, solid(22) is bigger
+  # Find number of observations in data that are not missing (input to model)
+  n_sample <- nrow(data_nomissing) 
+  
+  # Get population size: # rows of liquid edibles found to be THC-dominant (est'd from sample)
+  # Note: we are assuming there is no CBD in the THC-dominant edibles for now.
+  n_pop <- ifelse(unique(data$inventorytype)==23, 
+                  n_liquid_rows * liq_pct_THC, 
+                  n_solid_rows * sol_pct_THC) 
+  
+  sample_pop_inflator <- n_pop / n_sample # scale sample estimate to population estimate
   
   # Make TF-IDF matrix and get PCAs
-  tfidf <- names_DocTermMatrix(data$inv_productname) # Compute PCAs
+  tfidf <- names_DocTermMatrix(data_nomissing$inv_productname) # Compute PCAs
   tfidf_pca <- prcomp(tfidf) # don't scale; keep IDF weightings
   tfidf <- tfidf_pca$x[, 1:n_pc] # Select n PCs (for speed)
   
   # Add TF-IDF features to data
-  data <- data %>% # Variables used on RHS include:
+  data_nomissing <- data_nomissing %>% # Variables used on RHS include:
     select(
       sale_time,
       price_x,
@@ -257,8 +383,8 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
     cbind(tfidf) # Add on TFIDF matrix
   
   # Separate to train and test
-  train <- data %>% filter(!is.na(mgTHC))
-  test <- data %>% filter(is.na(mgTHC))
+  train <- data_nomissing %>% filter(!is.na(mgTHC))
+  test <- data_nomissing %>% filter(is.na(mgTHC))
   
   ##### Implement RF without cv
   RF <- randomForest(mgTHC ~.,
@@ -302,55 +428,95 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
   output_results <- list()
   
   output_results$alltime <-
-    c('samplekgTHC' = sum(test$pred) / 1e6, # estimated in sample (all THC > CBD from 100k query)
-      'populationkgTHC' = sum(test$pred) * n_pop / n_sample / 1e6, # after scaling up (assumes no CBD>THC, which must be fixed)
+    c('samplekgTHC' = sum(test$pred, na.rm=T) / 1e6, # estimated in sample (all THC > CBD from 100k query)
+      'populationkgTHC' = sum(test$pred, na.rm=T) * sample_pop_inflator / 1e6, # after scaling up (assumes no CBD>THC, which must be fixed)
       'cvmeanerror' = ifelse(cv, mean(results_cv$meanError), NA))
     
   # Final results by year-month
   output_results$monthly <-
     test %>%
       group_by(year, month) %>%
-      summarise(samplekgTHC = sum(pred) / 1e6,
-                popkgTHC = samplekgTHC * n_pop / n_sample)
+      summarise(samplekgTHC = sum(pred, na.rm=T) / 1e6,
+                popkgTHC = samplekgTHC * sample_pop_inflator)
   
   output_results
 }
 ```
 
-```{r liquidRF, echo = TRUE}
-cat("Liquid Edibles")
-# undebug(estTHC_RFcv)
-# debug(estTHC_RFcv)
-# divisor <- 10
 
-liq_est <- estTHC_RFcv(data = edibles_liq,
+
+### Liquid Edibles
+
+```{r liquidRF, echo = TRUE}
+liq_est <- estTHC_RFcv(data = edibles %>% filter(invtype=="Liquid Edible", dominant=="THC"),
             n_pc = 200 / divisor, # orig 294
             n_cv_folds = 5, # orig: 5
             n_tree = 200 / divisor, # orig: 200
             cv=TRUE
   )
-
-ggplot(data=liq_est$monthly) +
-  geom_col(aes(x=month, y=popkgTHC)) + facet_wrap(~year) +
-  labs(title='kg THC from liquid edibles')
-
-liq_est$alltime
+# debug(estTHC_RFcv)
 ```
 
-```{r solidRF}
-cat("solid Edibles")
-sol_est <- estTHC_RFcv(data = edibles_sol,
-            n_pc = 300 , # orig 294
+```{r liquidRFresults}
+# RF results
+liq_est$alltime %>% 
+  kable(caption="RF: sample estimate; pop est; CV error")
+
+# Annual totals
+liq_est$monthly %>% 
+  group_by(year) %>% 
+  summarise(popkgTHC = sum(popkgTHC)) %>% 
+  arrange(year) %>%
+  kable(caption="THC est'd for THC-dominant Liquid Edibles by year")
+
+# Chart year-month totals
+ggplot(data=liq_est$monthly) +
+  geom_col(aes(x=month, y=popkgTHC)) + facet_grid(~year) +
+  labs(title='kg THC from thc-dominant liquid edibles', digits=2)
+
+# FY total
+liq_est$monthly %>% 
+  ungroup() %>%
+        filter((year==2016 & month >= 7) | (year ==2017 & month <= 6)) %>%
+        summarise(popkgTHC = sum(popkgTHC)) %>%
+  kable(caption="July 2016 - June 2017 total", digits=2)
+```
+
+### Solid Edibles
+
+```{r solidRF, eval = T}
+sol_est <- estTHC_RFcv(data = edibles %>% filter(dominant=='THC', invtype=='Solid Edible'),
+            n_pc = 200 / divisor, # orig 294
             n_cv_folds = 5, # orig: 5
-            n_tree = 200, # orig: 200
+            n_tree = 200 / divisor, # orig: 200
             cv=TRUE
 )
+```
 
-sol_est$alltime
+```{r solidRFresults}
+# RF results
+sol_est$alltime %>% 
+  kable(caption="RF: sample estimate; pop est; CV error")
 
+# Plot year-month
 ggplot(sol_est$monthly) +
-  geom_col(aes(x=month, y=popkgTHC)) + facet_wrap(~year) +
-  labs(title='kg THC from solid edibles')
+  geom_col(aes(x=month, y=popkgTHC)) + facet_grid(~year) +
+  labs(title='kg THC from THC-dominant solid edibles', digits=2)
+
+# Annual totals
+sol_est$monthly %>% 
+  group_by(year) %>% 
+  summarise(popkgTHC = sum(popkgTHC)) %>% 
+  arrange(year) %>%
+  kable(caption="THC est'd for THC-dominant Solid Edibles by year")
+
+# FY total
+sol_est$monthly %>% 
+  ungroup() %>%
+        filter((year==2016 & month >= 7) | (year ==2017 & month <= 6)) %>%
+        summarise(popkgTHC = sum(popkgTHC)) %>%
+  kable(caption="July 2016 - June 2017 total", digits=2)
+
 ```
 
 # Non-edibles 
@@ -381,18 +547,21 @@ GROUP BY year, month, invtype
 ```{r}
 nonedible <- read.csv("../data/kgTHCCBDretailnonedible.csv")
 ggplot(nonedible,
-       aes(x=month, y=kgTHC)) + geom_col() + facet_wrap(~year)
-
+       aes(x=month, y=kgTHC)) + geom_col() + facet_grid(~year)
 ```
 
-```{r}
+
+
+# All
+
+```{r, eval = T}
 edibles_combined <- bind_rows(list(
   liq_est$monthly %>% select(month, year, kgTHC =popkgTHC) %>% mutate(invtype="Liquid Edibles", kgCBD= NA),
   sol_est$monthly %>% select(month, year, kgTHC =popkgTHC) %>% mutate(invtype="Solid Edibles", kgCBD= NA)))
 
 ggplot(edibles_combined, aes(x=month, y=kgTHC, fill=invtype)) +
   geom_col() + facet_grid(~year) +
-  labs(title='kgTHC sold (edibles)')
+  labs(title='kgTHC sold (edibles)', y="kg THC estimated")
 
 combined <- 
   bind_rows(
@@ -403,9 +572,8 @@ combined <-
 ggplot(combined, aes(x=month, y=kgTHC, fill=invtype)) +
   geom_col() + facet_grid(~year) +
   labs(title='kgTHC sold')
-
-    
 ```
+
 
 
 
@@ -448,22 +616,24 @@ B19001m17	HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2015 INFLATION-ADJUSTED DOL
 
 # Appendix
 
+## Detailed Results
+
+### Edible THC monthly
+
+```{r}
+kable(liq_est$monthly %>% arrange(year, month))
+kable(sol_est$monthly %>% arrange(year, month))
+```
+
 ## Query for MJ edible export
 ```{r, eval=FALSE}
-# TABLE: Edibles2017; query: imputedEdibles2017
-SELECT store_loc,  thc, thca, cbd, cbda,
-  inv_productname, transactionid, #maybe useful for basket analysis?
-  sale_time, weight, usableweight, inventorytype, price_x, gram_price_x,
-  invtype
-
-FROM [rand-systems:full_WA_data__proper.Retail_ALL]
-WHERE invtype IN ('Solid Marijuana Infused Edible', 'Liquid Marijuana Infused Edible')
-AND sale_time > cast('2017-01-01 00:00:00.00 UTC' as timestamp)
-==========================================
-
-# SECOND QUERY: TABLE: Edibles2017pt2; query: imputeEdibles2017pt2
-SELECT (thc + (0.877 * thca)) AS Potency_THC,
-  (cbd + (cbda *  (0.877)) AS Potency_CBD,
+SELECT
+  CASE
+    WHEN thca is null THEN thc
+    ELSE thc + (0.877 * thca) END AS Potency_THC,
+  CASE
+    WHEN cbda is null THEN cbd
+    ELSE cbd + (0.877 * cbda) END AS Potency_CBD,
   inv_productname, transactionid,
   sale_time, weight,
   #usableweight #note: no useable weights here
@@ -472,76 +642,20 @@ SELECT (thc + (0.877 * thca)) AS Potency_THC,
   #gram_price_x, #no usable weights here,
   #invtype #note: abbreviated in inventorytype
   store_loc
+  
+  FROM(
+    SELECT store_loc,  thc, thca, cbd, cbda,
+    inv_productname, transactionid, #maybe useful for basket analysis?
+    sale_time, weight, usableweight, inventorytype, price_x, gram_price_x,
+    invtype
 
-FROM [rand-systems:full_WA_data__proper.edibles2017]
-
-# THIRD QUERY: get random sample
-=======Random Sampling
-SELECT *
-FROM [rand-systems:full_WA_data__proper.edibles2017step2]
-WHERE RAND() < 100000/4972181  #format: rough number of rows desired / total rows in table
-
-#this gets approximate random sample with scalable code
+    FROM [rand-systems:full_WA_data__proper.Retail_ALL]
+    
+    WHERE 
+      invtype IN ('Solid Marijuana Infused Edible', 'Liquid Marijuana Infused Edible')
+      AND RAND() < 220000/4972181
+      
+    LIMIT 200000
+    )
 ```
 
-
-
-<!-- # Edible CBD Products -->
-
-<!-- **TO DO: This is a little more complicated here. Need to estimate usable weight, NOT CBD/THC content directly. THEN use this to get THC content.** -->
-
-<!-- ## Liquids -->
-
-<!-- ```{r} -->
-<!-- edibles_cbd_liq <- edibles_CBD[edibles_CBD$inventorytype == 23,] -->
-
-<!-- #train model -->
-<!-- edibles_cbd_liq_train <- edibles_cbd_liq  %>% filter(!is.na(mgTHC)) -->
-<!-- edibles_cbd_liq.lm <- lm(mgTHC ~ price_x + pricetime, edibles_cbd_liq_train) -->
-<!-- #estimate -->
-<!-- edibles_cbd_liq_impute <- edibles_cbd_liq  %>% filter(1is.na(mgTHC)) -->
-<!-- edibles_cbd_liq_impute$mgTHC <- predict(edibles_cbd_liq.lm, edibles_cbd_liq_impute) -->
-
-<!-- summary(edibles_cbd_liq.lm) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- edibles_cbd_liq_summary <- data.frame(type = as.character(), mgCBD = as.numeric(), sd = as.numeric()) -->
-
-<!-- edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, -->
-<!--                              data.frame(type = "Training", mgCBD = sum(edibles_cbd_liq_train$mgTHC), sd = sd(edibles_cbd_liq_train$mgTHC) / (nrow(edibles_cbd_liq_train) ^ 0.5))) -->
-
-<!-- edibles_cbd_liq_summary <- rbind(edibles_cbd_liq_summary, -->
-<!--                              data.frame(type = "Imputed", mgCBD = sum(edibles_cbd_liq_impute$mgTHC), sd = sd(edibles_cbd_liq_impute$mgTHC) / (nrow(edibles_cbd_liq_impute) ^ 0.5))) -->
-
-<!-- kable(cbind(edibles_cbd_liq_summary[,1], (edibles_cbd_liq_summary[,2:3])* n_edible_rows / 100000)) -->
-<!-- ``` -->
-
-<!-- ## Solids -->
-
-<!-- ```{r} -->
-<!-- edibles_cbd_sol <- edibles_CBD[edibles_CBD$inventorytype == 22,] -->
-
-<!-- #train model -->
-<!-- edibles_cbd_sol_train <- edibles_cbd_sol  %>% filter(!is.na(mgTHC)) -->
-<!-- edibles_cbd_sol.lm <- lm(mgTHC ~ price_x + pricetime, edibles_cbd_sol_train) -->
-<!-- #estimate -->
-<!-- edibles_cbd_sol_impute <- edibles_cbd_sol %>% filter(!is.na(mgTHC)) -->
-<!-- edibles_cbd_sol_impute$mgTHC <- predict(edibles_cbd_sol.lm, edibles_cbd_sol_impute) -->
-
-
-<!-- summary(edibles_cbd_sol.lm ) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- edibles_cbd_sol_summary <- data.frame(type = as.character(), mgCBD = as.numeric(), sd = as.numeric()) -->
-
-<!-- edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, -->
-<!--                              data.frame(type = "Training", mgCBD = sum(edibles_cbd_sol_train$mgTHC), sd = sd(edibles_cbd_sol_train$mgTHC) / (nrow(edibles_cbd_sol_train) ^ 0.5))) -->
-
-<!-- edibles_cbd_sol_summary <- rbind(edibles_cbd_sol_summary, -->
-<!--                              data.frame(type = "Imputed", mgCBD = sum(edibles_cbd_sol_impute$mgTHC), sd = sd(edibles_cbd_sol_impute$mgTHC) / (nrow(edibles_cbd_sol_impute) ^ 0.5))) -->
-
-<!-- kable(cbind(edibles_cbd_sol_summary[,1], (edibles_cbd_sol_summary[,2:3])* n_edible_rows / 100000)) -->
-
-<!-- ``` -->
