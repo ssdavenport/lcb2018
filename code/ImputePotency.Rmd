@@ -25,18 +25,27 @@ source("CMU_code_share_av.R") #Import "search_productname(arg)", where arg = inv
 This informs us about the time frame we are looking at.
 
 ```{r parameters, echo = TRUE}
-divisor <- 2 # scaleability parameter; sets sample size.
+# scaleability parameter; sets sample size, # RF trees, and # PCA
+divisor <- 10
 
-# all-time - These row counts come from the entire SQL table (not just what is imported to R)
+# Export results to CSV?
+export_estimates <- FALSE # Enable to write CSV for THC estimates
+export_filename <- "../data/THC_estimates_nocbddominantedibles.csv"
+
+# Import random sample of edibles table
+edibles <- read.csv("../data/ediblesAlltimeSample200k.csv")  # Load dataset: all time
+```
+
+```{r parameters_secondary, echo = FALSE}
+# Hard-coded data on all-time row counts from SQL table (not just what is imported to R)
 n_solid_rows <- 8487415 # 22 # verified sept 24
 n_liquid_rows <- 2150470 # 23 # verified sept 24
 n_edible_rows <-  n_solid_rows + n_liquid_rows
 
-
-# Import random sample of edibles table
-edibles <- read.csv("../data/ediblesAlltimeSample200k.csv")  # Load dataset: all time
 rows_sampled_sql <- nrow(edibles) # number of rows in our SQL parameter
 n_sample_obs <- rows_sampled_sql / divisor # number of obs to sample from all edibles from SQL export
+
+message(paste0("# Edible rows sampled from SQL database: ", rows_sampled_sql))
 ```
 
 # Prep Census Data
@@ -289,6 +298,18 @@ edibles %>% filter(dominant=='THC',
 ## Plot mgTHC/CBD and Price
 
 ```{r plot, fig.height=2}
+# hist -> 500mg
+ggplot(edibles %>% filter(dominant=='THC'), aes(x = mgTHC)) +
+  geom_histogram() +
+  facet_grid(.~ invtype) + xlim(c(0, 500)) +
+  labs(title="Distribution mgTHC")
+
+ggplot(edibles %>% filter(dominant=='CBD'), aes(x = mgTHC)) +
+  geom_histogram() +
+  facet_grid(.~ invtype) + xlim(c(0, 500)) +
+  labs(title="CBD: Distribution mg", x='CBD')
+
+# hist -> 100mg (where most data are)
 ggplot(edibles %>% filter(dominant=='THC'), aes(x = mgTHC)) +
   geom_histogram() +
   facet_grid(.~ invtype) + xlim(c(0, 100)) +
@@ -299,6 +320,7 @@ ggplot(edibles %>% filter(dominant=='CBD'), aes(x = mgTHC)) +
   facet_grid(.~ invtype) + xlim(c(0, 100)) +
   labs(title="CBD: Distribution mg", x='CBD')
 
+# relationship w average price
 ggplot(edibles %>% filter(dominant=='THC'), aes(y = price_x, x = mgTHC)) +
   geom_point(alpha = 0.1) +
   facet_grid(.~ invtype) +
@@ -351,13 +373,13 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
     filter(!is.na(sale_time),
            !is.na(avgincome)) # sometimes this is missing
   
-  # Declare parameters for extrapolation from sample to population
+    # Declare parameters for extrapolation from sample to population
   # Find number of observations in data that are not missing (input to model)
   n_sample <- nrow(data_nomissing) 
   
   # Get population size: # rows of liquid edibles found to be THC-dominant (est'd from sample)
   # Note: we are assuming there is no CBD in the THC-dominant edibles for now.
-  n_pop <- ifelse(unique(data$inventorytype)==23, 
+  n_pop <- ifelse(unique(data_nomissing$inventorytype)==23, 
                   n_liquid_rows * liq_pct_THC, 
                   n_solid_rows * sol_pct_THC) 
   
@@ -386,6 +408,8 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
   train <- data_nomissing %>% filter(!is.na(mgTHC))
   test <- data_nomissing %>% filter(is.na(mgTHC))
   
+
+  
   ##### Implement RF without cv
   RF <- randomForest(mgTHC ~.,
                      data = train,
@@ -393,6 +417,9 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
   # Get predictions from RF
   test$pred <- predict(RF, test)
   test <- test %>%
+    mutate(year = lubridate::year(as.POSIXct(sale_time, origin='1970-01-01')),
+           month =  lubridate::month(as.POSIXct(sale_time, origin='1970-01-01')))
+  train <- train %>%
     mutate(year = lubridate::year(as.POSIXct(sale_time, origin='1970-01-01')),
            month =  lubridate::month(as.POSIXct(sale_time, origin='1970-01-01')))
 
@@ -413,7 +440,7 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
       # implement RF with k-fold cv and n_tree trees
       # train error drastically decreases by ntree 100, and more so at ntree 250
       RF <- randomForest(mgTHC ~.,
-                         data = traincv %>% select(-partition),
+                         data = traincv %>% select(-partition, -year, -month),
                          ntree = n_tree) 
       
       # add predictions from test data
@@ -428,13 +455,14 @@ estTHC_RFcv <- function(data, n_pc, n_cv_folds, n_tree, cv = FALSE) {
   output_results <- list()
   
   output_results$alltime <-
-    c('samplekgTHC' = sum(test$pred, na.rm=T) / 1e6, # estimated in sample (all THC > CBD from 100k query)
-      'populationkgTHC' = sum(test$pred, na.rm=T) * sample_pop_inflator / 1e6, # after scaling up (assumes no CBD>THC, which must be fixed)
+    c('samplekgTHC' = (sum(train$mgTHC, na.rm=T) + sum(test$pred, na.rm=T)) / 1e6, # estimated in sample (all THC > CBD from 100k query)
+      'populationkgTHC' = (sum(train$mgTHC, na.rm=T) + sum(test$pred, na.rm=T)) * sample_pop_inflator / 1e6, # after scaling up (assumes no CBD>THC, which must be fixed)
       'cvmeanerror' = ifelse(cv, mean(results_cv$meanError), NA))
     
   # Final results by year-month
   output_results$monthly <-
-    test %>%
+    rbind(train %>% select(year, month, pred=mgTHC),
+          test %>% select(year, month, pred)) %>%
       group_by(year, month) %>%
       summarise(samplekgTHC = sum(pred, na.rm=T) / 1e6,
                 popkgTHC = samplekgTHC * sample_pop_inflator)
@@ -572,6 +600,9 @@ combined <-
 ggplot(combined, aes(x=month, y=kgTHC, fill=invtype)) +
   geom_col() + facet_grid(~year) +
   labs(title='kgTHC sold')
+
+# Save estimates if you want to
+if (export_estimates == T) write.csv(combined, export_filename)
 ```
 
 
