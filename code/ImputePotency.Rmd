@@ -34,6 +34,7 @@ export_filename <- "../data/THC_estimates_nocbddominantedibles.csv"
 
 # Import random sample of edibles table
 edibles <- read.csv("../data/ediblesAlltimeSample200k.csv")  # Load dataset: all time
+
 ```
 
 ```{r parameters_secondary, echo = FALSE}
@@ -41,7 +42,6 @@ edibles <- read.csv("../data/ediblesAlltimeSample200k.csv")  # Load dataset: all
 n_solid_rows <- 8487415 # 22 # verified sept 24
 n_liquid_rows <- 2150470 # 23 # verified sept 24
 n_edible_rows <-  n_solid_rows + n_liquid_rows
-
 rows_sampled_sql <- nrow(edibles) # number of rows in our SQL parameter
 n_sample_obs <- rows_sampled_sql / divisor # number of obs to sample from all edibles from SQL export
 
