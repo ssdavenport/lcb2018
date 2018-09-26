@@ -25,7 +25,7 @@ source("functions.r")
 options(scipen=12)
 
 
-# Get inventory conversions
+# Get inventory conversions (dated)
 # -- QUERY
 # Run in legacy SQL
 # convDetailedT
@@ -52,22 +52,27 @@ convDetailed <- convDetailedT %>%
             childusablewt = sum(childusablewt))
 write.csv(convDetailed, "../output/conversionsDetailed.csv")
 
-
-
-
 # Get Ingredient weights.
-# -- QUERY: CHILD WEIGHTS.
-#  SELECT inventorytype,
-#    count(*) as nConversions,
-#    sum(CAST(childweight as integer)) as childwt,
-#    sum(CAST(child_usableweight as integer)) as childusablewt
-# FROM [full_WA_data.biotrackthc_inventoryconversions]
-# GROUP BY inventorytype
-convChild <- read_csv("../gqoutput/results-20180630-131250.csv") %>%
-  mutate(inventorytype = getInvtype(inventorytype),
-         wtPer = childwt/nConversions,
-         usablewtPer = childusablewt/nConversions)  %>%
-  arrange(-childwt)
+# -- QUERY: convChildT
+# SELECT inventorytype, location,
+#     year, month,
+#     count(*) as nConversions,
+#     sum(CAST(childweight as float)) as childwt,
+#     sum(CAST(child_usableweight as float)) as childusablewt
+# FROM [rand-systems:full_WA_data__proper.biotrackthc_inventoryconversions_dated] 
+# GROUP BY inventorytype, location, year, month
+convChildT <- read.csv("../gqoutput/convChildT.csv") %>%
+  mutate(inventorytype = getInvtype(inventorytype))
+# get non-dated version
+convChild <- convChildT %>%
+  group_by(inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt),
+            wtPer = childwt/nConversions,
+            usablewtPer = childusablewt/nConversions
+            ) %>%  arrange(-childwt)
+
 
 # Get Potency
 # Load potency test data scores
@@ -176,42 +181,39 @@ transfers <- left_join(transferVolumes, transferUsableWeight) %>%
 
 # Inventory Transfers
 # Import inventorytransfers with 10 time points cut by ID
-# -- getinventorytransfersT20
-# -- Outer query sums up units and KG, grouped by T, inventorytype
+# -- getinventorytransfersYrMo -- ordered version
 # SELECT sum(weight) as units,
 #        sum(usableweight)/1000 as kg,
 #        sum(saleprice)/1000 as kUSD,
 #        FLOOR(rowN / 255250) as t,
 #        inventorytype
-#        from( 
+#        from(
 #        -- Inner Query adds row numbers by ID, cleans columns for summing
 #           SELECT CAST(inventorytype as integer) as inventorytype,
-#                 ROW_NUMBER() OVER(ORDER BY ID ASC) rowN, 
+#                 ROW_NUMBER() OVER(ORDER BY ID ASC) rowN,
 #                 Description, location, inventoryid,
 #                 case when weight is null then 0 else cast(weight as float) end as weight,
 #                 case when usableweight is null then 0 else cast(usableweight as float) end as usableweight,
 #                 case when saleprice is null then 0 else cast(saleprice as float) end as saleprice
-#           FROM [full_WA_data__proper.biotrackthc_inventorytransfers])
-# where inventorytype <= 40 
+#           FROM [full_WA_data__proper.biotrackthc_inventorytransfers_ordered])
+# where inventorytype <= 40
 # GROUP BY t, inventorytype
 # order by t
-transfersT20 <- read.csv("../gqoutput/results-20180913-171901.csv") %>%
+# this is ordered correctly now
+transfersYrMo <- read.csv("../gqoutput/invTransfersYearMonth.csv") %>% 
   mutate(inventorytype = getInvtype(inventorytype),
          pricePerG = kUSD/kg,
          unitsK=units/1e3,
-         perPerUnit = kUSD/unitsK) %>%
-  filter( t < max(t))
+         perPerUnit = kUSD/unitsK)
 
-# -- getinventoryTransferst3
-transfersT3 <- read.csv("../gqoutput/results-20180914-094912.csv") %>%
-  mutate(inventorytype = getInvtype(inventorytype),
-         pricePerG = kUSD/kg,
+transfersYr <- transfersYrMo %>%
+  group_by(year, inventorytype) %>%
+  summarise(units = sum(units),
+            kg = sum(kg),
+            kUSD = sum(kUSD)) %>%
+  mutate(pricePerG = kUSD/kg,
          unitsK=units/1e3,
-         perPerUnit = kUSD/unitsK) %>%
-  filter( t < max(t))
-
-transfersT20Max <- max(transfersT20$t)
-transfersT3Max <- max(transfersT3$t)
+         perPerUnit = kUSD/unitsK)
 ```
 
 
@@ -245,53 +247,54 @@ ingrdnts <- c("Hydrocarbon Wax", "Bubble Hash", "C02 Hash Oil", "Marijuana Mix",
               "Hash", "Kief")
 ```
 
-Ingredient products incldue: `r paste0(ingrdnts, collapse="; ")`.
+Ingredient products include: `r paste0(ingrdnts, collapse="; ")`.
 
 ```{r}
 # TODO: clean childwt to remove outliers. Currently you have way too much childwt going to Extract for Inhalation and nConversions!
 
-# Load version of convChild with a time dimension.
-convChildT <- read.csv("../gqoutput/results-20180913-161933.csv") %>%
-  mutate(inventorytype = getInvtype(inventorytype))
-convChildT10 <- read.csv("../gqoutput/results-20180913-163153.csv") %>%
-  mutate(inventorytype = getInvtype(inventorytype))
-# Preview full table
-# knitr::kable(convChild, digits=0)
-
-
-# Production of ingredient, 3 time periods, KG, table
-convChildT %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
-  mutate(KG=G/1e3) %>%
-  filter(inventorytype%in%ingrdnts) %>%
-  select(-G) %>%
-  arrange(-KG) %>%
-  select(inventorytype, KG, t) %>%
-  spread(t, KG) %>%
-  arrange(-`3`) %>%
-  kable(digits=1, caption="Kg (usableweight) of ingredient products, by (approximate) year")
-
 # Production of ingredient, 10 time periods, Units, chart
-convChildT10 %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
-  mutate(KG=G/1e3) %>%
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
   filter(inventorytype%in%ingrdnts,
-         t<10,
-         conversions>1) %>%
-  select(-G) %>%
-  arrange(-KG) %>%
-  ggplot(aes(x=t, y=Units/1e3, color=inventorytype)) + geom_line() +
-  labs(title="Number of Ingredient Products Produced",
-       y="1000 Units Converted")
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=nConversions/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Ingredient Products Produced",
+       y="1000 Conversions")
 
-# DISABLED: Table ingredient production, all-time (units, KG)
-# convChild %>%
-#   select(inventorytype, Units=childwt, G =childusablewt) %>%
-#   mutate(KG=G/1e3) %>% 
-#   filter(inventorytype%in%ingrdnts) %>%
-#   select(-G) %>%
-#   arrange(-KG) %>%
-#   knitr::kable(caption="Ingredient Production. Repeat this analysis for separate years?")
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%ingrdnts,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childwt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Weight of Ingredient Products Produced",
+       y="weight (KG) Converted")
+
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%ingrdnts,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childusablewt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Usable weight of Ingredient Products Produced",
+       y="Usable Weight (KG) Converted")
+
 
 ```
 
@@ -305,61 +308,49 @@ Retail flower types include: `r paste0(retailFlower, collapse="; ")`.
 
 ```{r}
 # Production of ingredient, 3 time periods, KG, table
-convChildT %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
-  mutate(KG=G/1e3,
-         MT=G/1e6) %>%
-  filter(inventorytype%in%retailFlower) %>%
-  select(-G) %>%
-  arrange(-KG) %>%
-  select(inventorytype, MT, t) %>%
-  spread(t, MT) %>%
-  arrange(-`3`) %>%
-  kable(digits=1, caption='Production of "Flower" Types by year (MT)')
-
-convChildT %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
-  mutate(UnitsM=Units/1e6) %>%
-  filter(inventorytype%in%retailFlower) %>%
-  select(inventorytype, UnitsM, t) %>%
-  spread(t, UnitsM) %>%
-  arrange(-`3`) %>%
-  kable(digits=1, caption='Production of "Flower" Types by year (Million Units)')
 
 # Production of ingredient, 10 time periods, Units, chart
-convChildT10 %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
-  mutate(MT=G/1e6) %>%
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
   filter(inventorytype%in%retailFlower,
-         t<10,
-         conversions>1) %>%
-  select(-G) %>%
-  arrange(-MT) %>%
-  ggplot(aes(x=t, y=MT, color=inventorytype)) + geom_line() +
-  labs(title="Retail Flower: MT Produced",
-       y="MT Produced")
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=nConversions/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Number of Ingredient Products Produced",
+       y="1000 Conversions")
 
-# Production of ingredient, 10 time periods, Units, chart
-convChildT10 %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
-  mutate(MT=G/1e6) %>%
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
   filter(inventorytype%in%retailFlower,
-         t<10,
-         conversions>1) %>%
-  select(-G) %>%
-  arrange(-MT) %>%
-  ggplot(aes(x=t, y=Units/1e6, color=inventorytype)) + geom_line() +
-  labs(title="Retail Flower Units Produced",
-       y="Million Retail 'Units' Produced")
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childwt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Weight of Ingredient Products Produced",
+       y="weight (KG) Converted")
 
-# CHART ALL-TIME (Turned off)
-# convChild %>%
-#   select(inventorytype, Units=childwt, G =childusablewt) %>%
-#   mutate(MT=G/1e6) %>% 
-#   filter(inventorytype%in%retailFlower) %>%
-#   select(-G) %>%
-#   arrange(-MT) %>%
-#   knitr::kable(caption='Ingredient Production of "Flower" Types -Repeat for separate years?', digits=1)
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%retailFlower,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childusablewt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Usable weight of Ingredient Products Produced",
+       y="Usable Weight (KG) Converted")
 ```
 
 #### Retail, Non-Flower
@@ -378,44 +369,48 @@ retailOther <- c("Solid Marijuana Infused Edible",
 Retail non-flower types include: `r paste0(retailOther, collapse="; ")`. 
 
 ```{r}
-# Production of ingredient, 3 time periods, KG, table
-convChildT %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
-  mutate(KG=G/1e3) %>%
-  filter(inventorytype%in%retailOther) %>%
-  select(-G) %>%
-  arrange(-KG) %>%
-  select(inventorytype, KG, t) %>%
-  spread(t, KG) %>%
-  arrange(-`3`) %>%
-  kable(digits=1, caption='Retail Non-Flower: KG Produced (Usableweight)')
-
 # Production of ingredient, 10 time periods, Units, chart
 convChildT %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=range) %>%
-  mutate(UnitsK=Units/1e3) %>%
-  filter(inventorytype%in%retailOther) %>%
-  select(-G) %>%
-  arrange(-UnitsK) %>%
-  select(inventorytype, t, UnitsK) %>%
-  spread(t, UnitsK) %>%
-  arrange(-`3`) %>%
-  kable(digits=1, caption='Retail Non-Flower: Units Produced (1000s)')
-
-# Production of ingredient, 10 time periods, Units, chart
-convChildT10 %>%
-  select(inventorytype, Units=childweight, G =child_usableweight, t=rowN, conversions) %>%
-  mutate(MT=G/1e6) %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
   filter(inventorytype%in%retailOther,
-         t<10,
-         conversions>1) %>%
-  select(-G) %>%
-  arrange(-MT) %>%
-  ggplot(aes(x=t, y=Units/1e6, color=inventorytype)) + geom_line() +
-  labs(title="Retail Non-Flower: Units Produced",
-       y="Units Produced (Million)")
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=nConversions/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Number of Ingredient Products Produced",
+       y="1000 Conversions")
 
-# 
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%retailOther,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childwt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Weight of Ingredient Products Produced",
+       y="weight (KG) Converted")
+
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%retailOther,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childusablewt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Usable weight of Ingredient Products Produced",
+       y="Usable Weight (KG) Converted")
 ```
 
 ### 4C THC/CBD Concentrations
@@ -543,36 +538,36 @@ transfers %>%
   filter(invtype %in% c(plants, lots)) %>% 
   arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  select(kUSD, t, inventorytype) %>%
+  select(kUSD, year, inventorytype) %>%
   spread(inventorytype, kUSD) %>%
   kable(caption="$1000 sales", digits=1)
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  select(units, t, inventorytype) %>%
+  select(units, year, inventorytype) %>%
   spread(inventorytype, units) %>%
   kable(caption="1000 units", digits=1)
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  select(kg, t, inventorytype) %>%
+  select(kg, year, inventorytype) %>%
   spread(inventorytype, kg) %>%
   kable(caption="kg", digits=1)
 
-transfersT20 %>%
+transfersYrMo %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  ggplot(aes(x=t, y=units/1e3, color=inventorytype)) + geom_line() +
+  ggplot(aes(x=month, y=units/1e3, color=inventorytype)) + geom_line() + facet_grid(~year) +
   labs(title="Plant and Lot Sales by Units (1000)")
 
-transfersT20 %>%
+transfersYrMo %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  ggplot(aes(x=t, y=kUSD, color=inventorytype)) + geom_line() +
+  ggplot(aes(x=month, y=kUSD, color=inventorytype)) + geom_line() + facet_grid(~year) +
   labs(title="Plant and Lot Sales by $1000s")
 ```
 
-#### "Ingredients" (Processors)
+####  (Processors)
 
 This contains procesed inputs
 
@@ -581,32 +576,32 @@ transfers %>%
   filter(invtype %in% ingrdnts) %>% arrange(-nTransfers) %>% select(-usableweight) %>% 
   kable(digits=2, caption="All-time production")
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
-  select(kUSD, t, inventorytype) %>%
+  select(kUSD, year, inventorytype) %>%
   spread(inventorytype, kUSD) %>%
   kable(caption="$1000 sales", digits=1)
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
-  select(units, t, inventorytype) %>%
+  select(units, year, inventorytype) %>%
   spread(inventorytype, units) %>%
   kable(caption="1000 units", digits=1)
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
-  select(kg, t, inventorytype) %>%
+  select(kg, year, inventorytype) %>%
   spread(inventorytype, kg) %>%
   kable(caption="kg", digits=1)
 
-transfersT20 %>%
+transfersYrMo %>%
   filter(inventorytype %in%ingrdnts) %>%
-  ggplot(aes(x=t, y=units/1e3, color=inventorytype)) + geom_line() +
+  ggplot(aes(x=month, y=units/1e3, color=inventorytype)) + geom_line() +facet_grid(~year) +
   labs(title="Ingredient Sales by Units (1000)")
 
-transfersT20 %>%
+transfersYrMo %>%
   filter(inventorytype %in%ingrdnts) %>%
-  ggplot(aes(x=t, y=kUSD, color=inventorytype)) + geom_line() +
+  ggplot(aes(x=month, y=kUSD, color=inventorytype)) + geom_line() + facet_grid(~year) +
   labs(title="Ingredient Sales by $1000s")
 
 ```
@@ -625,27 +620,26 @@ transfers %>%
 
 ```{r, fig.width=10}
 
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
   arrange(-units) %>%
-  select(t, inventorytype, unitsK) %>%
+  select(year, inventorytype, unitsK) %>%
   spread(inventorytype, unitsK)%>% 
   kable(digits=2, caption='1000 units')
 
-
-transfersT3 %>%
+transfersYr %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
   arrange(-kUSD) %>%
-  select(t, inventorytype, kUSD) %>%
+  select(year, inventorytype, kUSD) %>%
   spread(inventorytype, kUSD)%>% 
   kable(digits=2, caption='$1000s')
 
-transfersT20 %>%
+transfersYrMo %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
-  gather(metric, value, units, kg, kUSD, pricePerG) %>%
+  gather(metric, value, units, kg, kUSD) %>%
   filter(metric!='kg') %>%
-  ggplot(aes(x=t, y=value, color=inventorytype)) + geom_line() +
-  facet_wrap(~metric, scales='free') +
+  ggplot(aes(x=month, y=value, color=inventorytype)) + geom_line() +
+  facet_grid(metric~year, scales='free') +
   labs(title="Retail Production: $, Units, Price-per-kg-usableweight") +
   theme_minimal()
   
@@ -999,8 +993,8 @@ TODOs:
 Below we produce a preview of the data in this table. (Date is also available but not shown here.)
 
 ```{r}
-kable(convDetailed %>% 
-        dplyr::sample_n(5))
+kable(convDetailed %>% head(5))
+#        dplyr::sample_n(5))
 ```
 
 This table can be viewed with respect to parent or child products. Parent products include lots and all intermediate products. Child products include all intermediate products and retail products.  
@@ -1078,7 +1072,7 @@ convDetailedT %>%
   ggplot(aes(x=month, y=childwt/1e6, color=child)) + 
   facet_grid(~year) +
   geom_point() + geom_line() +
-  labs(y="kg weight", title="Production FROM Lots / Mix",
+  labs(y="MT weight", title="Production FROM Lots / Mix",
        subtitle="types appear as children in conversion table")
 
 
@@ -1092,7 +1086,7 @@ convDetailedT %>%
   ggplot(aes(x=month, y=childusablewt/1e6, color=child)) + 
   facet_grid(~year) +
   geom_point() + geom_line() +
-  labs(y="kg usable weight", title="Production FROM Lots / Mix",
+  labs(y="MT usable weight", title="Production FROM Lots / Mix",
        subtitle="types appear as children in conversion table")
 
 convDetailedT %>%
