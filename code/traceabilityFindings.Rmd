@@ -1,5 +1,5 @@
 ---
-title: "Traceability-Based Findings - Sept Draft"
+title: "Traceability-Based Findings - v1.6"
 author: "Steven Davenport"
 date: "`r format(Sys.time(), '%B %d, %Y (%H:%M)')`"
 output:
@@ -10,12 +10,47 @@ output:
 ---
 
 **Version history**
-v1.5 - September Draft.  
-v1.4 (July 3) Restructured outline; sent to JPC/BK for review.
+v1.6 - Late Sept Draft
+v1.5 - September Draft, showed to Beau 9/24
+v1.4 (July 3) Restructured outline; sent to JPC/BK for review.  
 v1.3 (June 30) restructured outline.  
 v1.2 (June 30) added analysis of inventoryconversions table.  
 v1.1 (June 29) clarified outline; incorporated comments from Kee Won RE methods. Was sent briefly to JPC.  
 v1.0 (June 27) provided outline; finished first draft of retail tables.
+
+```{r coding_variables, echo = F}
+# usable weight
+has_usableweight <- c("Usable Marijuana",
+                      "Marijuana Extract for Inhalation",
+                      "Marijuana Mix Infused",
+                      "Marijuana Mix Package",
+                      "Hash",
+                      "Kief"# might want to check out
+                      #"Marijuana Infused Topicals" # would need further inspection
+                      )
+
+# Look only at Ingredient Types
+ingrdnts <- c("Hydrocarbon Wax", "Bubble Hash", "C02 Hash Oil", "Marijuana Mix", "Food Grade Solvent Extract", 
+              "Infused Dairy Butter or Fat in Solid Form", "Infused Cooking Oil",
+              "Hash", "Kief")
+
+
+retailOther <- c("Solid Marijuana Infused Edible",
+                 "Liquid Marijuana Infused Edible",
+                 "Marijuana Extract for Inhalation",
+                 "Marijuana Mix Infused",
+                 "Capsule",
+                 "Marijuana Infused Topicals",
+                 "Tincture",
+                 "Suppository")
+
+retailFlower <- c("Usable Marijuana", "Marijuana Mix Package")
+
+plants <- c("Seed", "Plant Tissue", "Mature Plant", "Clone", "Wet Flower")
+
+lots <- c("Flower Lot", "Other Plant Material Lot")
+
+```
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
@@ -25,7 +60,7 @@ library(tidyverse)
 library(knitr)
 source("functions.r")
 options(scipen=12)
-
+options(knitr.kable.NA = '-') # leave NA as dashed
 
 # Get inventory conversions (dated)
 # -- QUERY
@@ -244,44 +279,42 @@ convChild <- convChildT %>%
             ) %>%  arrange(-childwt)
 ```
 
-## Results (Section 4)
-
-### 4A Harvest Analysis
+## Harvest Analysis
 
 For this section, I will paste in data from Kee Won's analysis. Unfortunately that is not present in this DOCX but can be seen in the accompanying document.
 
 + Plants, Harvest Weight, Harvest per plant. See .docx
 
-#### Waste?
+### Waste?
 
 We have not produced estimates for "waste" during harvest. That is possible but not yet done. We do not currently know a place in the database that tracks "waste" at other parts of the supply chain.
 
-### 4B Amount Produced (Units, MT)
+## Production Volumes
 
-Querying the "inventory conversions" table yields data on volume of production.  The inventory conversions table records all conversions from one inventory type to another. T
+Plant and bulk flower have been omitted from these tables as they are not well recorded in the conversions table.
 
+### Lots
 
-
-
-This table does not contain a "date" field, so we cannot easily group events by year. However, we can still produce time-series analyses by grouping the data by the order of rows in the database. Below we produce time-series analysis in this way, sometimes cutting data into 3 time chunks (very roughly 2015, 2016, 2017). For charts, we cut the data into more time chunks to reveal trends. Data span nearly the entire supply chain:
-
-+ Lotting stage (flower -> flower lot)
-+ processing/manufacturing stage 1 (flower/OPM to intermediate extracts)
-+ processing/manufacturing stage 1 (intermediate extracts to retail product)
-
-
-#### "Ingredients"
+For reasons relating to how data was stored in the database, data on production of lots is not available until December 2015.
 
 ```{r}
-# Look only at Ingredient Types
-ingrdnts <- c("Hydrocarbon Wax", "Bubble Hash", "C02 Hash Oil", "Marijuana Mix", "Food Grade Solvent Extract", 
-              "Infused Dairy Butter or Fat in Solid Form", "Infused Cooking Oil",
-              "Hash", "Kief")
+# summary table: show kg produced by year-quarter
+convChildT %>%
+  filter(inventorytype%in%lots) %>%
+  mutate(q = cut(month, c(0, 3.1, 6.1, 9.1, 12.1), labels=1:4),
+         h = cut(month, c(0, 6.1, 12.1), labels=1:2),
+         yearq = paste0(year,"-", q),
+         yearh = paste0(year,"-", h)) %>%
+  group_by(inventorytype, yearh) %>%
+  summarise(MT = sum(childwt)/1e6) %>%
+  spread(yearh, MT) %>%
+  arrange(-`2017-1`) %>%
+  select(-`2014-2`, -`2015-1`, -`2015-2`) %>%
+  rename("Ingredient" = inventorytype) %>%
+  kable(digits=1, caption="Production Volume (MT)")
 ```
 
-Ingredient products include: `r paste0(ingrdnts, collapse="; ")`.
-
-TODO: 
+### Ingredients
 
 ```{r}
 # summary table: show kg produced by year-quarter
@@ -295,80 +328,12 @@ convChildT %>%
   summarise(KG = sum(childwt)/1e3) %>%
   spread(yearh, KG) %>%
   arrange(-`2017-1`) %>%
-  filter(!is.na(`2016-2`)) %>%
-  kable(digits=1, caption="Ingredient Production (KG) by 6-month period")
+  rename("Ingredient" = inventorytype) %>%
+  kable(digits=0, caption="Production Volume (KG)")
 
 ```
 
-#### Retail Flower
-
-```{r}
-retailFlower <- c("Usable Marijuana", "Marijuana Mix Package")
-```
-
-Retail flower types include: `r paste0(retailFlower, collapse="; ")`.
-
-```{r}
-# Production of ingredient, 3 time periods, KG, table
-
-# Production of ingredient, 10 time periods, Units, chart
-convChildT %>%
-  group_by(year, month, inventorytype) %>%
-  summarise(nConversions = sum(nConversions),
-            childwt = sum(childwt),
-            childusablewt = sum(childusablewt)) %>%
-  filter(inventorytype%in%retailFlower,
-         nConversions>1,
-         !(year== 2017 & month ==11)) %>% # exclude nov 2017 (no data, just a few blips)
-  ggplot(aes(x=month, y=nConversions/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
-  facet_grid(~year) +
-  labs(title="Number of Ingredient Products Produced",
-       y="1000 Conversions")
-
-convChildT %>%
-  group_by(year, month, inventorytype) %>%
-  summarise(nConversions = sum(nConversions),
-            childwt = sum(childwt),
-            childusablewt = sum(childusablewt)) %>%
-  filter(inventorytype%in%retailFlower,
-         nConversions>1,
-         !(year== 2017 & month ==11)) %>%
-  ggplot(aes(x=month, y=childwt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
-  facet_grid(~year) +
-  labs(title="Weight of Ingredient Products Produced",
-       y="weight (KG) Converted")
-
-convChildT %>%
-  group_by(year, month, inventorytype) %>%
-  summarise(nConversions = sum(nConversions),
-            childwt = sum(childwt),
-            childusablewt = sum(childusablewt)) %>%
-  filter(inventorytype%in%retailFlower,
-         nConversions>1,
-         !(year== 2017 & month ==11)) %>%
-  ggplot(aes(x=month, y=childusablewt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
-  facet_grid(~year) +
-  labs(title="Usable weight of Ingredient Products Produced",
-       y="Usable Weight (KG) Converted")
-```
-
-#### Retail, Non-Flower
-
-```{r}
-retailOther <- c("Solid Marijuana Infused Edible",
-                 "Liquid Marijuana Infused Edible",
-                 "Marijuana Extract for Inhalation",
-                 "Marijuana Mix Infused",
-                 "Capsule",
-                 "Marijuana Infused Topicals",
-                 "Tincture",
-                 "Suppository")
-```
-
-Retail non-flower types include: `r paste0(retailOther, collapse="; ")`. 
+### Retail
 
 ```{r}
 convChildT %>%
@@ -382,21 +347,38 @@ convChildT %>%
   spread(yearh, KG) %>%
   arrange(-`2017-1`) %>%
   filter(!is.na(`2016-2`)) %>%
-  kable(digits=1, caption="Retail (non-flower) Production (KG) by 6-month period")
-
-
+  rename("Retail Products (Extract-Based)" = inventorytype) %>%
+  kable(digits=0, caption="Production Volume, Units (1000s)")
 ```
 
-### 4C THC/CBD Concentrations
+```{r}
+# Note: verified to be KG (usable weight)
+convChildT %>%
+  filter(inventorytype%in%c(retailFlower, retailOther),
+         inventorytype%in%has_usableweight) %>%
+  mutate(q = cut(month, c(0, 3.1, 6.1, 9.1, 12.1), labels=1:4),
+         h = cut(month, c(0, 6.1, 12.1), labels=1:2),
+         yearq = paste0(year,"-", q),
+         yearh = paste0(year,"-", h)) %>%
+  group_by(inventorytype, yearh) %>%
+  summarise(KGusable = sum(childusablewt)/1e3) %>%
+  spread(yearh, KGusable) %>%
+  arrange(-`2017-1`) %>%
+  rename("Retail Products" = inventorytype) %>%
+  kable(digits=0, caption="Production Volume, Net Weight (KG)")
+```
+
+
+## THC/CBD Concentrations
 
 ```{r}
 potencyAnnual <- read_csv("../data/thccbdannual.csv")
 ```
 
-#### Lots
+### Lots
 
 ```{r}
-lots <- c("Flower Lot")
+
 
 flowerLotPotency <- potencyAnnual %>% filter(invtype %in% lots)
 
@@ -416,7 +398,7 @@ flowerLotPotency %>%
 ```
 
 
-#### "Ingredients"
+### "Ingredients"
 
 First we compute the average THC/CBD concentrations for tests run in each year.  Note CBD was not tracked well in 2014/2015.
 
@@ -444,7 +426,7 @@ Then, we may attempt to estimate MT THC/CBD produced, by multiplying each year's
 
 ```
 
-#### Retail Products
+### Retail Products
 
 Note: usableweight content for solid/liquid edibles is clearly wrong/too small. **To do: add estimated content for edibles to this table.** Also note that "usable marijuana" comes from flower lots, so potency for that should be equal to flower lots.
 
@@ -496,17 +478,15 @@ convChild %>%
   
 ```
 
-### 4D. Farmgate revenue (by producer/processor good)
+## 4D. Farmgate revenue (by producer/processor good)
 
-#### Plants/Harvest/Lotted Material (Producers)
+### Plants/Harvest/Lotted Material (Producers)
 
 This contains non-processed inputs.
 
-#### TODO: add transfers divided by 3 time points for rows in tables?
+### TODO: add transfers divided by 3 time points for rows in tables?
 
 ```{r}
-plants <- c("Seed", "Plant Tissue", "Mature Plant", "Clone", "Wet Flower")
-lots <- c("Flower Lot", "Other Plant Material Lot")
 
 transfers %>%
   filter(invtype %in% c(plants, lots)) %>% 
@@ -541,7 +521,7 @@ transfersYrMo %>%
   labs(title="Plant and Lot Sales by $1000s")
 ```
 
-####  (Processors)
+###  (Processors)
 
 This contains procesed inputs
 
@@ -580,7 +560,7 @@ transfersYrMo %>%
 
 ```
 
-#### Retail Products
+### Retail Products
 
 This examines only retail products.
 
@@ -619,11 +599,11 @@ transfersYrMo %>%
   
 ```
 
-### 4E. Retail Products
+## 4E. Retail Products
 
-#### 4Ei: Sales: (Units, $) - by product type
+### 4Ei: Sales: (Units, $) - by product type
 
-##### Sales Volume (Units)
+#### Sales Volume (Units)
 
 ```{r, echo=FALSE}
 # TODO: Update query for proper unit/item-transaction definition
@@ -653,7 +633,7 @@ retailUSDxType %>%
 
 ```
 
-##### Sales Volume (Usable Weight)
+#### Sales Volume (Usable Weight)
 
 Note: this is validated by tabulating usableweight sold in the retail table! (at least for usable MJ)
 
@@ -686,7 +666,7 @@ retailUSDxType %>%
   knitr::kable(caption='Usable Weight (MT) By Inventory Type - Annual', digits=2)
 ```
 
-##### Sales Volume (Dollars)
+#### Sales Volume (Dollars)
 
 ```{r, echo=FALSE}
 # Chart
@@ -718,7 +698,7 @@ retailUSDxType %>%
 ```
 
 
-#### 4Eii:THC/CBD Content
+### 4Eii:THC/CBD Content
 
 ```{r load_edibles_thc, echo=F}
 edible_thc <- read.csv("../data/THC_estimates_nocbddominantedibles.csv")
@@ -764,7 +744,7 @@ retailUSDxType %>%
 
 ```
 
-##### Edibles Only
+#### Edibles Only
 
 
 
@@ -795,11 +775,11 @@ retailUSDxType %>%
 
 ```
 
-### 4F. Supply Chain Dynamics: Product Flows and Conversion Ratios
+## 4F. Supply Chain Dynamics: Product Flows and Conversion Ratios
 
 ** TODO: Add analysis from the pathways document?**
 
-##### 4Fi.	Efficiency: Flower/OPM-per-ingredient (gram-to-gram ratio). Conversion Ratios (inventoryconversions)
+#### 4Fi.	Efficiency: Flower/OPM-per-ingredient (gram-to-gram ratio). Conversion Ratios (inventoryconversions)
 
 This data needs substantial cleaning (top-censoring the parent and child weights; allowing usablewt to be interpretable by performing the correct wt*usableweight calculations (perhaps also requiring top-coding or some other conditional logic to prevent absurd values)) before it can be interpretable.
 
@@ -821,15 +801,15 @@ ratiosRaw <- convDetailed %>%
 kable(ratiosRaw, digits=2)
 ```
 
-###### (wet?) Flower / OPM – to –  ingredient… (Hydrocarbon wax; CO2 Hash Oil;  Food Grade Solvent Extract)...
+##### (wet?) Flower / OPM – to –  ingredient… (Hydrocarbon wax; CO2 Hash Oil;  Food Grade Solvent Extract)...
 
-###### Flower / OPM – to – final product (Extract, Solid / Liquid Edible, etc.)
+##### Flower / OPM – to – final product (Extract, Solid / Liquid Edible, etc.)
 
 
 
-##### 4Fii. End products as share of canopy:
+#### 4Fii. End products as share of canopy:
 
-#### Conversion Pathway Prevalence
+### Conversion Pathway Prevalence
 
 The table below produces a simple count of the number of records in each.
 
@@ -840,14 +820,14 @@ convPaths %>% head(50) %>% kable(caption="Dominant Conversion Pathways")
 [[ compute pathway prevalence in percentage terms, a la Markov chain, and put results here ]]
 
 
-###### Retail products by % of flower/OPM production (by weight)
+##### Retail products by % of flower/OPM production (by weight)
 
-###### by % of “all” production
+##### by % of “all” production
 
 
-### Licensee Revenue Analysis
+## Licensee Revenue Analysis
 
-#### Producer/P&P/Processors
+### Producer/P&P/Processors
 
 This can be generated from inventorytransfers table. inventorytransfer::saleprice. Validate/verify this. (5.3mil records)
 
@@ -859,12 +839,12 @@ This can be generated from inventorytransfers table. inventorytransfer::salepric
 
 ```
 
-#### Stores
+### Stores
 
 This can be generated from the dispensing table.
 
 
-### Harvest
+## Harvest
 
 [[ Results will go here ]]  
 [[ kg harvest of wet flower, dry flower, OPM, and waste]] 
@@ -925,9 +905,9 @@ GROUP BY location, inventorytype;
 # WHERE b.locationtype < 7;
 ```
 
-#### Production Volumes
+### Production Volumes
 
-### Processing / Manufacturing
+## Processing / Manufacturing
 
 This sub-section includes: 1) production volumes, 2) pathway prevalence, 3) conversion ratios
 
@@ -970,12 +950,50 @@ convChildT %>%
   
 ```
 
+### Lots
+
+```{r}
+# For these, "weight" is the same as "usableweight"
+
+# lots
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%lots,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=nConversions/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Lots Produced",
+       y="1000 Conversions")
+
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%lots,
+         nConversions>1,
+         (year!= 2017 & month !=11)) %>%
+  ggplot(aes(x=month, y=childwt/1e6, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(~year) +
+  labs(title="Lots Produced",
+       y='1000 KG ("weight")')
+```
+
 ### Ingredient Production (reliable?)
 
 TODO: validate usableweight and weight. Weight appears to indicate literal weight. Usableweight must be miscoded, as it is >> weight.
 
 ```{r}
 # TODO: clean childwt to remove outliers. Currently you have way too much childwt going to Extract for Inhalation and nConversions!
+
+
+
 
 # Production of ingredient, 10 time periods, Units, chart
 convChildT %>%
@@ -1042,9 +1060,40 @@ convChildT %>%
 TODO: find out how to interpret weight v usable weight!!! These are bullshit. You need to go into the tables and figure out what is what.
 
 ```{r}
+# RETAIL FLOWER (USABLEMJ and MJMIXPACKAGE)
+# WEight
+convChildT %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(inventorytype%in%retailFlower,
+         nConversions>1,
+         !(year== 2017 & month ==11)) %>%
+  ggplot(aes(x=month, y=childwt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(inventorytype~year, scales='free') +
+  labs(title="Production ('weight'): Usable MJ / MJ Mix Package: ",
+       y="weight (KG) Converted")
 
+#Usableweight
+convChildT %>%
+  filter(inventorytype%in%retailFlower) %>%
+  group_by(year, month, inventorytype) %>%
+  summarise(nConversions = sum(nConversions),
+            childwt = sum(childwt),
+            childusablewt = sum(childusablewt)) %>%
+  filter(
+         nConversions>1,
+         !(year== 2017 & month ==11)) %>%
 
-# Production of ingredient, 10 time periods, Units, chart
+  ggplot(aes(x=month, y=childusablewt/1e3, color=inventorytype)) +
+  geom_line() + geom_point() +
+  facet_grid(inventorytype~year, scales='free') +
+    labs(title="Production ('usable weight'): Usable MJ / MJ Mix Package: ",
+       y="Suable weight (KG) Converted")
+
+# OTHER  RETAIL
 convChildT %>%
   group_by(year, month, inventorytype) %>%
   summarise(nConversions = sum(nConversions),
