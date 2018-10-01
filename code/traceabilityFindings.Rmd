@@ -52,6 +52,9 @@ lots <- c("Flower Lot", "Other Plant Material Lot")
 options(knitr.kable.NA = '-') # leave NA as dashed
 
 align_pattern <- "lcccccccccc" # align 1st col left, others center.
+
+
+
 ```
 
 ```{r setup, include=FALSE, echo=FALSE}
@@ -84,6 +87,7 @@ potency <- potency %>%
 
 
 potencyMonthly <- potency %>%
+  mutate(invtype = factor(invtype)) %>%
   group_by(invtype, year, month, inventorytype) %>%
   summarise(TotalTHC = mean(TotalTHC, na.rm=T),
             TotalCBD = mean(TotalCBD, na.rm=T),
@@ -150,13 +154,15 @@ smooth_h <- function(data, x_col='TotalTHC', h = 3, t_col = 't') {
 # Smooth the potency test by inventorytype
 potencyMonthly <- smooth_h_wrapper(potencyMonthly, 5) %>% 
   filter(!is.na(TotalTHCs)) %>%
-  mutate(date=make_date(year, month))
+  mutate(date=make_date(year, month)) %>%
+  ungroup 
 
 # annual is an aggregated of the smoothed (not perfect but we shouldn't really use it any way)
 potencyAnnual <- potencyMonthly %>%
   group_by(invtype, year, inventorytype) %>%
   summarise(TotalTHC = mean(TotalTHC, na.rm=T),
-            TotalCBD = mean(TotalCBD, na.rm=T))
+            TotalCBD = mean(TotalCBD, na.rm=T)) %>%
+  ungroup 
 
 # Export file for use in estimating THC content of products!
 potencyAnnual %>% write_csv("../data/thccbdannual.csv")
@@ -308,14 +314,15 @@ transfersYrMo <- read.csv("../gqoutput/invTransfersYearMonth.csv") %>%
          pricePerG = kUSD/kg,
          unitsK=units/1e3,
          perPerUnit = kUSD/unitsK,
-         date=make_date(year, month))
+         date=make_date(year, month)) %>%
+  rename(kgusable='kg')
 
 transfersYr <- transfersYrMo %>%
   group_by(year, inventorytype) %>%
   summarise(units = sum(units),
-            kg = sum(kg),
+            kgusable = sum(kgusable),
             kUSD = sum(kUSD)) %>%
-  mutate(pricePerG = kUSD/kg,
+  mutate(pricePerG = kUSD/kgusable,
          unitsK=units/1e3,
          perPerUnit = kUSD/unitsK)
 ```
@@ -478,6 +485,9 @@ Below we compute the simple average of THC/CBD concentrations among tested produ
 potencyAnnual %>% 
   select(-TotalCBD, -inventorytype) %>%
   filter(invtype %in% c(lots, ingrdnts)) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(TotalTHC))) %>%
+  
   spread(invtype, TotalTHC) %>%
   kable(digits=1, caption='Ingredient Average THC Concentrations, by Year', align="lcccccccccc")
 
@@ -486,6 +496,7 @@ potencyAnnual %>%
   select(-TotalTHC, -inventorytype) %>%
   filter(invtype %in% c(lots, ingrdnts),
          year%in%2015:2017) %>%
+  mutate(invtype = reorder(invtype, -(TotalCBD))) %>%
   spread(invtype, TotalCBD) %>%
   kable(digits=2, caption='Average CBD %s', align="lcccccccccc")
 ```
@@ -493,11 +504,13 @@ potencyAnnual %>%
 ```{r}
 potencyMonthly %>% 
   filter(!invtype%in%c(retailOther, retailFlower)) %>%
+  mutate(invtype = reorder(invtype, -(TotalTHCs))) %>%
   ggplot(aes(x=date, y=TotalTHCs, color=invtype)) + geom_point() + geom_line() +
   labs(title="Bulk/Ingredient Products", y='THC%')
 
 potencyMonthly %>% 
   filter(!invtype%in%c(retailOther, retailFlower)) %>%
+  mutate(invtype = reorder(invtype, -(TotalCBDs))) %>%
   ggplot(aes(x=date, y=TotalCBDs, color=invtype)) + geom_point() + geom_line() +
   labs(title="Bulk/Ingredient Products", y='CBD%')
 ```
@@ -509,11 +522,13 @@ Note: usableweight content for solid/liquid edibles is clearly wrong/too small. 
 ```{r}
 potencyMonthly %>% 
   filter(invtype%in%c(retailOther, retailFlower)) %>%
+    mutate(invtype = reorder(invtype, -(TotalTHCs))) %>%
   ggplot(aes(x=date, y=TotalTHCs, color=invtype)) + geom_point() + geom_line() +
   labs(title="Retail Products", y='THC%')
 
 potencyMonthly %>% 
   filter(invtype%in%c(retailOther, retailFlower)) %>%
+    mutate(invtype = reorder(invtype, -(TotalCBDs))) %>%
   ggplot(aes(x=date, y=TotalCBDs, color=invtype)) + geom_point() + geom_line() +
   labs(title="Retail Products", y='CBD%')
 ```
@@ -549,40 +564,46 @@ convChild %>%
 
 This contains non-processed inputs.
 
-### TODO: add transfers divided by 3 time points for rows in tables?
+
 
 ```{r}
-
-transfers %>%
-  filter(invtype %in% c(plants, lots)) %>% 
-  arrange(-nTransfers) %>% select(-usableweight) %>% kable(digits=2)
 
 transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
   select(kUSD, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kUSD))) %>%
   spread(inventorytype, kUSD) %>%
   kable(caption="$1000 sales", digits=1)
 
 transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
   select(units, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(units))) %>%
   spread(inventorytype, units) %>%
   kable(caption="1000 units", digits=1)
 
 transfersYr %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  select(kg, year, inventorytype) %>%
-  spread(inventorytype, kg) %>%
-  kable(caption="kg", digits=1)
+  select(kgusable, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kgusable))) %>%
+  spread(inventorytype, kgusable) %>%
+  kable(caption="kgusable", digits=1)
 
 transfersYrMo %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  ggplot(aes(x=date, y=units/1e3, color=inventorytype)) + geom_line() + 
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(units))) %>%
+  ggplot(aes(x=date, y=units/1e3, color=inventorytype)) + geom_line() + theme_minimal() +
   labs(title="Plant and Lot Sales by Units (1000)")
 
 transfersYrMo %>%
   filter(inventorytype %in%c(plants, lots)) %>%
-  ggplot(aes(x=date, y=kUSD, color=inventorytype)) + geom_line() + 
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kUSD))) %>%
+  ggplot(aes(x=date, y=kUSD, color=inventorytype)) + geom_line() + theme_minimal() +
   labs(title="Plant and Lot Sales by $1000s")
 ```
 
@@ -598,29 +619,39 @@ transfers %>%
 transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
   select(kUSD, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kUSD))) %>%
   spread(inventorytype, kUSD) %>%
   kable(caption="$1000 sales", digits=1)
 
 transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
   select(units, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(units))) %>%
   spread(inventorytype, units) %>%
   kable(caption="1000 units", digits=1)
 
 transfersYr %>%
   filter(inventorytype %in%ingrdnts) %>%
-  select(kg, year, inventorytype) %>%
-  spread(inventorytype, kg) %>%
-  kable(caption="kg", digits=1)
+  select(kgusable, year, inventorytype) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kgusable))) %>%
+  spread(inventorytype, kgusable) %>%
+  kable(caption="kgusable", digits=1)
 
 transfersYrMo %>%
   filter(inventorytype %in%ingrdnts) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(units))) %>%
   ggplot(aes(x=date, y=units/1e3, color=inventorytype)) + geom_line() +
   labs(title="Ingredient Sales by Units (1000)")
 
 transfersYrMo %>%
   filter(inventorytype %in%ingrdnts) %>%
-  ggplot(aes(x=date, y=kUSD, color=inventorytype)) + geom_line() + 
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kUSD))) %>%
+  ggplot(aes(x=date, y=kUSD, color=inventorytype)) + geom_line() + theme_minimal() +
   labs(title="Ingredient Sales by $1000s")
 
 ```
@@ -633,6 +664,8 @@ This examines only retail products.
 transfers %>%
   filter(invtype %in% c(retailFlower, retailOther)) %>% 
   mutate(pricePerG = saleprice/usableweight) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(nTransfers))) %>%
   arrange(-nTransfers) %>% 
   kable(digits=2, caption='All-time production', align="lcccccccccc")
 ```
@@ -643,6 +676,8 @@ transfers %>%
 transfersYr %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
   arrange(-units) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(unitsK))) %>%
   select(year, inventorytype, unitsK) %>%
   spread(inventorytype, unitsK)%>% 
   kable(digits=2, caption='1000 units', align="lcccccccccc")
@@ -650,14 +685,18 @@ transfersYr %>%
 transfersYr %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
   arrange(-kUSD) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(kUSD))) %>%
   select(year, inventorytype, kUSD) %>%
   spread(inventorytype, kUSD)%>% 
   kable(digits=2, caption='$1000s', align="lcccccccccc")
 
 transfersYrMo %>%
   filter(inventorytype %in% c(retailFlower, retailOther)) %>%
-  gather(metric, value, units, kg, kUSD) %>%
-  filter(metric!='kg') %>%
+  gather(metric, value, units, kgusable, kUSD) %>%
+  ungroup %>%
+  mutate(inventorytype = reorder(inventorytype, -(value))) %>%
+  filter(metric!='kgusable') %>%
   ggplot(aes(x=date, y=value, color=inventorytype)) + geom_line() +
   facet_grid(metric~., scales='free') +
   labs(title="Retail Production: $, Units, Price-per-kg-usableweight") +
@@ -675,6 +714,8 @@ transfersYrMo %>%
 # TODO: Update query for proper unit/item-transaction definition
 # Chart
 retailUSDxType %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(itemtransactions))) %>%
   ggplot(aes(x=date, y=itemtransactions, color=invtype)) + geom_line() +
   labs(title="Retail Item-Transactions by Inventory Type",
        y="Item-transactions (retail data rows)",
@@ -694,6 +735,8 @@ retailUSDxType %>%
   group_by(YEAR, invtype) %>%
   summarise(itemtransactions = sum(itemtransactions, na.rm=T)) %>%
   select(invtype, YEAR, itemtransactions) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(itemtransactions))) %>%
   spread(invtype, itemtransactions) %>%
   knitr::kable(caption='Retail Item-Transactions By Inventory Type - Annual', digits=0, align="lcccccccccc")
 
@@ -708,6 +751,8 @@ Note: this is validated by tabulating usableweight sold in the retail table! (at
 # Chart
 retailUSDxType %>%
   filter(usableweight >0 ) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(usableweight))) %>%
   ggplot(aes(x=date, y=usableweight/1e6, color=invtype)) + geom_line() +
   labs(title="Retail Item-Transactions by Inventory Type",
        y="usable weight (MT)",
@@ -728,6 +773,8 @@ retailUSDxType %>%
   group_by(YEAR, invtype) %>%
   summarise(usableweight = sum(usableweight, na.rm=T)/1e6) %>%
   select(invtype, YEAR, usableweight) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(usableweight))) %>%
   spread(YEAR, usableweight) %>%
   knitr::kable(caption='Usable Weight (MT) By Inventory Type - Annual', digits=2, align="lcccccccccc")
 ```
@@ -737,6 +784,8 @@ retailUSDxType %>%
 ```{r, echo=FALSE}
 # Chart
 retailUSDxType %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(price_x))) %>%
   ggplot(aes(x=date, y=price_x, color=invtype)) + geom_line() +
   labs(title="Gross Retail Sales by Inventory Type",
        y="$1000, Post-Excise",
@@ -757,6 +806,8 @@ retailUSDxType %>%
 retailUSDxType %>%
   group_by(YEAR, invtype) %>%
   summarise(price_x = sum(price_x)) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(price_x))) %>%
   select(invtype, YEAR, price_x) %>%
   spread(invtype, price_x) %>%
   knitr::kable(caption='Post-Excise Tax Sales By Inventory Type ($1k) - Annual', digits=0, align="lcccccccccc")
@@ -778,7 +829,10 @@ edible_thc %>%
   labs(title='Edbiles: kgTHC sold',
        caption="Counting THC-dominant edibles only")
 
-edible_thc %>% ggplot(aes(x=date, y=kgTHC, fill=invtype)) + geom_col() + 
+edible_thc %>% 
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(kgTHC))) %>%
+  ggplot(aes(x=date, y=kgTHC, fill=invtype)) + geom_col() + 
   labs(title='kgTHC sold',
        caption="Counting THC-dominant edibles only")
 
@@ -786,6 +840,8 @@ edible_thc %>% ggplot(aes(x=date, y=kgTHC, fill=invtype)) + geom_col() +
 # TODO: Update query for weighted averages
 # Chart
 retailUSDxType %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(totalTHC))) %>%
   ggplot(aes(x=date, y=totalTHC, color=invtype)) + geom_line() +
   labs(title="THC Content by Inventory Type",
        y="THC Percent",
@@ -804,6 +860,8 @@ retailUSDxType %>%
   group_by(YEAR, invtype) %>%
   summarise(totalTHC = weighted.mean(totalTHC, price_x)) %>%
   select(invtype, YEAR, totalTHC) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(totalTHC))) %>%
   spread(invtype, totalTHC) %>%
   knitr::kable(caption='Mean THC Content By Inventory Type (Weighted by $ Sales) - Annual', digits=1, align="lcccccccccc")
 
@@ -817,6 +875,8 @@ retailUSDxType %>%
 # TODO: Update query for weighted averages
 # Chart
 retailUSDxType %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(totalCBD))) %>%
   ggplot(aes(x=date, y=totalCBD, color=invtype)) + geom_line() +
   labs(title="CBD Content by Inventory Type",
        y="CBD Percent",
@@ -834,6 +894,8 @@ retailUSDxType %>%
 retailUSDxType %>%
   group_by(YEAR, invtype) %>%
   summarise(totalCBD = weighted.mean(totalCBD, price_x)) %>%
+  ungroup %>%
+  mutate(invtype = reorder(invtype, -(totalCBD))) %>%
   select(invtype, YEAR, totalCBD) %>%
   spread(invtype, totalCBD) %>%
   knitr::kable(caption='Mean CBD Content By Inventory Type (Weighted by $ Sales) - Annual', digits=1, align="lcccccccccc")
@@ -1018,13 +1080,13 @@ convChildT %>%
 convChildTYrMo %>%
   filter(inventorytype%in%lots) %>%
   ggplot(aes(x=date, y=nConversions/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Lots Produced",
        y="1000 Conversions")
 
 convChildTYrMo %>%
   filter(inventorytype%in%lots) %>%
-  ggplot(aes(x=date, y=childwt/1e6, color=inventorytype)) + geom_line() + geom_point() +
+  ggplot(aes(x=date, y=childwt/1e6, color=inventorytype)) + geom_line() + theme_minimal() +geom_point() +
   labs(title="Lots Produced",
        y='1000 KG ("weight")')
 ```
@@ -1044,21 +1106,21 @@ TODO: validate usableweight and weight. Weight appears to indicate literal weigh
 convChildTYrMo %>%
   filter(inventorytype%in%ingrdnts) %>%
   ggplot(aes(x=date, y=nConversions/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Ingredient Products Produced",
        y="1000 Conversions")
 
 convChildTYrMo %>%
   filter(inventorytype%in%ingrdnts) %>%
   ggplot(aes(x=date, y=childwt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Weight of Ingredient Products Produced",
        y="weight (KG) Converted")
 
 convChildTYrMo %>%
   filter(inventorytype%in%ingrdnts) %>%
   ggplot(aes(x=date, y=childusablewt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Usable weight of Ingredient Products Produced -- PROB NOT RELIABLE",
        y="Usable Weight (KG) Converted")
 
@@ -1089,7 +1151,7 @@ TODO: find out how to interpret weight v usable weight!!! These are bullshit. Yo
 convChildTYrMo %>%
   filter(inventorytype%in%retailFlower) %>%
   ggplot(aes(x=date, y=childwt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   facet_grid(inventorytype~., scales='free') +
   labs(title="Production ('weight'): Usable MJ / MJ Mix Package: ",
        y="weight (KG) Converted")
@@ -1098,7 +1160,7 @@ convChildTYrMo %>%
 convChildTYrMo %>%
   filter(inventorytype%in%retailFlower) %>%
   ggplot(aes(x=date, y=childusablewt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   facet_grid(inventorytype~., scales='free') +
     labs(title="Production ('usable weight'): Usable MJ / MJ Mix Package: ",
        y="Suable weight (KG) Converted")
@@ -1107,21 +1169,21 @@ convChildTYrMo %>%
 convChildTYrMo %>%
   filter(inventorytype%in%retailOther) %>%
   ggplot(aes(x=date, y=nConversions/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Number of Ingredient Products Produced",
        y="1000 Conversions")
 
 convChildTYrMo %>%
   filter(inventorytype%in%retailOther) %>%
   ggplot(aes(x=date, y=childwt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Weight of Ingredient Products Produced",
        y="weight (KG) Converted")
 
 convChildTYrMo %>%
   filter(inventorytype%in%retailOther) %>%
   ggplot(aes(x=date, y=childusablewt/1e3, color=inventorytype)) +
-  geom_line() + geom_point() +
+  geom_line() + theme_minimal() +geom_point() +
   labs(title="Usable weight of Ingredient Products Produced",
        y="Usable Weight (KG) Converted")
 ```
